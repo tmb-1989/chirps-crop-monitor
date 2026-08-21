@@ -31,6 +31,10 @@ ZONES = {
                        [("belg", 2, 5), ("kiremt", 6, 9)]),
     "eth_gojjam":     ("ETH", "Ethiopia West Gojjam", 10.30, 37.50,
                        [("kiremt", 6, 9)]),
+    # the big western Oromia maize belt (Wellega/Jimma) — Ethiopia's
+    # largest crop zone; Mar-Nov matches the EWX maize WRSI window
+    "eth_oromia_maize": ("ETH", "Ethiopia Oromia maize belt", 8.798, 35.223,
+                         [("meher", 3, 11)]),
     "tza_mbeya":      ("TZA", "Tanzania Southern Highlands (Mbeya)", -8.90, 33.40,
                        [("msimu", 11, 5)]),
     "uga_masindi":    ("UGA", "Uganda Masindi", 1.70, 31.70,

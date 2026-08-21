@@ -138,9 +138,12 @@ def process(names: list[str], dir_url: str, dataset: str, masks: dict,
     from concurrent.futures import ThreadPoolExecutor
 
     done = 0
+    # a dekad counts as done only if every current zone has a value —
+    # adding a zone later automatically reprocesses old dekads for it
     have = {r[0] for r in con.execute(
-        "SELECT DISTINCT granule_start FROM observations WHERE dataset=?",
-        (dataset,))} if skip_existing else set()
+        "SELECT granule_start FROM observations WHERE dataset=? "
+        "GROUP BY granule_start HAVING count(DISTINCT zone_key) >= ?",
+        (dataset, len(masks)))} if skip_existing else set()
     todo = [n for n in names if dekad_dates(n)[0] not in have]
 
     def get(name: str) -> bytes:

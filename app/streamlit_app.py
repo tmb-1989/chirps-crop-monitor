@@ -86,7 +86,7 @@ view = st.sidebar.radio("View", ["Overview", "Zone detail"])
 
 # ======================== OVERVIEW ========================================
 # one representative zone per country, its main season
-REP_ZONES = ["ken_uasin_gishu", "eth_gojjam", "tza_mbeya", "uga_masindi",
+REP_ZONES = ["ken_uasin_gishu", "eth_oromia_maize", "tza_mbeya", "uga_masindi",
              "zmb_central", "mwi_lilongwe", "zwe_mash_west", "moz_manica",
              "mdg_vakinankaratra"]
 BENCH = [("WRSI %med", "lwrsi_africa_dekad_pctm"),
