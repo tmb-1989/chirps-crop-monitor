@@ -1,0 +1,6 @@
+# local ingestion + metrics (not needed by the deployed dashboard)
+-r requirements.txt
+requests
+scipy
+rasterio<1.4
+shapely>=2,<2.1

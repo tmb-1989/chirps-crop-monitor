@@ -5,4 +5,8 @@ cd "$(dirname "$0")"
 ./venv/bin/python ingest/run_ingest.py
 ./venv/bin/python ingest/chirps_raster.py
 ./venv/bin/python compute/metrics.py
+# push refreshed DB so the deployed Streamlit app stays current
+git add db/monitor.sqlite
+git diff --cached --quiet || git commit -m "data update $(date +%F)"
+git push origin main
 echo "update complete: $(date)"
