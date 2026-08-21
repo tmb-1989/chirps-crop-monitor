@@ -1,0 +1,8 @@
+streamlit
+pandas
+numpy
+plotly
+requests
+scipy
+rasterio<1.4
+shapely>=2,<2.1
