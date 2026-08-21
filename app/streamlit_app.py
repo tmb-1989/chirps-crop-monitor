@@ -75,6 +75,16 @@ the next one. Low WRSI + normal soil moisture = this harvest damaged but
 reserves intact; both low = the compounding case that precedes major
 food-security and fiscal events.
 
+**SPI — Standardized Precipitation Index** — recent rainfall expressed in
+standard deviations from its own 1991–2020 distribution (gamma-fitted per
+dekad-of-year, so values are comparable across seasons and zones). SPI-1
+sums the trailing ~1 month (fast, noisy — flags acute dry spells); SPI-3
+the trailing ~3 months (the agricultural signal — moves with WRSI).
+**−1 = moderate · −1.5 = severe · −2 = extreme drought** (≈1-in-40);
+positive values mirror on the wet side. Computed from CHIRPS dekads, so
+readings run ~4–14 days behind real time (a dekad closes, its prelim
+lands ~3 days later, the next scheduled update ingests it).
+
 **El Niño benchmarks** — each indicator's worst print during the 2015-16
 and 2023-24 El Niño droughts (Jul–Jun windows), the two modern reference
 crises. A current value at or below an episode low means conditions are
@@ -571,8 +581,9 @@ if have_metrics:
         f4.add_hline(y=0, line_dash="dash", line_color="gray")
         f4.add_hline(y=-1, line_dash="dot", line_color="orange")
         f4.add_hline(y=-1.5, line_dash="dot", line_color="red")
-        f4.update_layout(title="SPI (local CHIRPS v3 dekads, gamma-fit "
-                               "1991–2020)", height=340,
+        f4.update_layout(title="Standardized Precipitation Index (SPI), "
+                               "local CHIRPS v3 dekads, gamma-fit 1991–2020",
+                         height=340,
                          margin=dict(t=40, b=0))
         st.plotly_chart(f4, use_container_width=True)
 
