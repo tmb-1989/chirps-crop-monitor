@@ -158,7 +158,39 @@ if view == "Overview":
                     if not m.empty and m.v.iloc[0] is not None else None
         if any_data:
             orows.append(r)
-    st.dataframe(pd.DataFrame(orows), hide_index=True,
+    odf = pd.DataFrame(orows)
+
+    def _wrsi_shade(v):
+        # mirrors the zone-detail WRSI chart bands
+        if pd.isna(v):
+            return ""
+        if v < 60:
+            return "background-color: rgba(255,69,0,0.40)"    # severe
+        if v < 80:
+            return "background-color: rgba(255,165,0,0.35)"   # moderate
+        if v < 95:
+            return "background-color: rgba(255,215,0,0.30)"   # mild
+        return ""
+
+    def _sm_shade(v):
+        # mirrors the soil-moisture chart bands
+        if pd.isna(v):
+            return ""
+        if v < 75:
+            return "background-color: rgba(255,69,0,0.40)"    # beyond issue
+        if v < 85:
+            return "background-color: rgba(255,69,0,0.22)"    # issue level
+        if v < 95:
+            return "background-color: rgba(255,215,0,0.30)"   # watch
+        return ""
+
+    wrsi_cols = [c for c in odf.columns if c.startswith("WRSI")]
+    sm_cols = [c for c in odf.columns if c.startswith("SM")]
+    styled = (odf.style
+              .map(_wrsi_shade, subset=wrsi_cols)
+              .map(_sm_shade, subset=sm_cols)
+              .format(precision=1))
+    st.dataframe(styled, hide_index=True,
                  use_container_width=True, height=520)
     st.caption("Lows are the worst single granule in each Jul–Jun episode "
                "window. Off-season WRSI reads ~100 — compare southern-Africa "
@@ -360,7 +392,21 @@ with col_a:
         f2.add_scatter(x=lw.date, y=lw.value,
                        name="WRSI % of median")
         f2.add_hline(y=100, line_dash="dash", line_color="gray")
-        f2.add_hline(y=80, line_dash="dot", line_color="orange")
+        f2.add_hrect(y0=80, y1=94, fillcolor="gold", opacity=0.13,
+                     line_width=0, annotation_text="mild stress",
+                     annotation_position="top left",
+                     annotation_font_size=11)
+        f2.add_hrect(y0=60, y1=80, fillcolor="orange", opacity=0.15,
+                     line_width=0, annotation_text="moderate stress",
+                     annotation_position="top left",
+                     annotation_font_size=11)
+        f2.add_hrect(y0=0, y1=60, fillcolor="orangered", opacity=0.15,
+                     line_width=0, annotation_text="severe stress",
+                     annotation_position="top left",
+                     annotation_font_size=11)
+        recent_lw = lw[lw.date >= lw.date.max() - pd.Timedelta(days=1460)]
+        f2.update_yaxes(range=[min(55.0, recent_lw.value.min() - 5),
+                               max(140.0, recent_lw.value.max() + 5)])
         f2.update_layout(title="Water Requirement Satisfaction Index, % of "
                                "1982–2021 median (dekadal)",
                          height=340, margin=dict(t=40, b=0),
