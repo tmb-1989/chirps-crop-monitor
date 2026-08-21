@@ -136,6 +136,62 @@ if view == "Overview":
                "20–80th pct · orange dots = 2015-16 El Niño · purple dots = "
                "2023-24 El Niño")
 
+    def mini_indicator_chart(zk: str, ds: str, bands, y_floor, y_cap,
+                             color, title):
+        s = load("SELECT granule_start, value FROM observations WHERE "
+                 "zone_key=? AND dataset=? ORDER BY granule_start", (zk, ds))
+        if s.empty:
+            return None
+        s["date"] = pd.to_datetime(s.granule_start)
+        s = s[s.date >= s.date.max() - pd.Timedelta(days=1460)]
+        fm = go.Figure()
+        fm.add_scatter(x=s.date, y=s.value, line=dict(color=color, width=1.5),
+                       showlegend=False)
+        fm.add_hline(y=100, line_dash="dash", line_color="gray")
+        for y0, y1, fill, opac in bands:
+            fm.add_hrect(y0=y0, y1=y1, fillcolor=fill, opacity=opac,
+                         line_width=0)
+        fm.update_yaxes(range=[min(y_floor, s.value.min() - 5),
+                               max(y_cap, s.value.max() + 5)])
+        fm.update_layout(title=dict(text=title, font=dict(size=13)),
+                         height=220, margin=dict(t=30, b=0, l=0, r=0),
+                         showlegend=False)
+        return fm
+
+    WRSI_BANDS = [(80, 94, "gold", 0.13), (60, 80, "orange", 0.15),
+                  (0, 60, "orangered", 0.15)]
+    SM_BANDS = [(85, 95, "gold", 0.15), (75, 85, "orangered", 0.13)]
+
+    st.subheader("Water Requirement Satisfaction Index (% of median)")
+    cols = st.columns(3)
+    for i, zk in enumerate(REP_ZONES):
+        zr = zones.set_index("zone_key").loc[zk]
+        with cols[i % 3]:
+            fm = mini_indicator_chart(
+                zk, "lwrsi_africa_dekad_pctm", WRSI_BANDS, 55.0, 140.0,
+                "steelblue", zr["name"])
+            if fm is not None:
+                st.plotly_chart(fm, use_container_width=True)
+            else:
+                st.caption(f"{zr['name']}: no data")
+    st.caption("Bands: gold = mild stress (80–94) · orange = moderate "
+               "stress (60–80) · red = severe stress (<60)")
+
+    st.subheader("FLDAS root-zone soil moisture (% of mean)")
+    cols = st.columns(3)
+    for i, zk in enumerate(REP_ZONES):
+        zr = zones.set_index("zone_key").loc[zk]
+        with cols[i % 3]:
+            fm = mini_indicator_chart(
+                zk, "soilmoisture-0-100cm_global_month_pctm", SM_BANDS,
+                70.0, 125.0, "saddlebrown", zr["name"])
+            if fm is not None:
+                st.plotly_chart(fm, use_container_width=True)
+            else:
+                st.caption(f"{zr['name']}: no data")
+    st.caption("Bands: gold = watch territory (85–95) · red = issue level "
+               "(75–85)")
+
     st.subheader("Indicators vs El Niño episode lows")
     orows = []
     for zk in zones.zone_key:
