@@ -43,6 +43,44 @@ zone_label = {
     for _, r in zones.iterrows()
 }
 
+with st.expander("What the indicators mean and how to read them"):
+    st.markdown("""
+**CHIRPS rainfall** — satellite + rain-gauge blended precipitation
+(Climate Hazards Center, UCSB), updated every 5 days with ~2-day lag.
+Charts show the season's running total against the 1991–2020 mean and the
+20–80th percentile band: inside the band ≈ normal, below the band = a
+developing deficit. The dotted extension is the CHIRPS-GEFS forecast
+(next ~2 weeks, indicative only). *Monthly z-score* expresses a month's
+rainfall in standard deviations from normal — comparable across zones;
+|z| ≥ 2 is a roughly 1-in-40 extreme. In-season prints matter; dry-season
+z-scores are noise.
+
+**WRSI — Water Requirement Satisfaction Index** — an FAO crop-water model
+tracking how much of the maize crop's water *requirement* was met, dekad
+by dekad, weighted by growth stage. Shown as % of the 1982–2021 median
+for the same point in the season: ~100 = normal year. **80–94 = mild
+stress · 60–80 = moderate stress (yield loss) · below 60 = severe
+stress/failure.** Deficits are permanent within a season — the index
+never recovers even if late rains arrive — making it the best single
+harvest proxy. Only meaningful in-season (reads ~100 off-season).
+
+**FLDAS root-zone soil moisture** — modelled water content of the top
+100cm of soil (NASA land-surface model), monthly, ~6-week lag. Shown as
+% of the long-run mean: it moves slowly and integrates rainfall, so
+deviations are smaller but more persistent than rainfall's.
+**85–95 = watch territory · below 85 = issue level.** Read it as the
+season's buffer: at planting it sets how much insurance the crop starts
+with; after a failed season it shows whether the drought carries into
+the next one. Low WRSI + normal soil moisture = this harvest damaged but
+reserves intact; both low = the compounding case that precedes major
+food-security and fiscal events.
+
+**El Niño benchmarks** — each indicator's worst print during the 2015-16
+and 2023-24 El Niño droughts (Jul–Jun windows), the two modern reference
+crises. A current value at or below an episode low means conditions are
+tracking as bad as the worst of those events.
+""")
+
 today = dt.date.today()
 view = st.sidebar.radio("View", ["Overview", "Zone detail"])
 
