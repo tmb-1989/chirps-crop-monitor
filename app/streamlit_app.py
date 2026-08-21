@@ -53,7 +53,7 @@ REP_ZONES = ["ken_uasin_gishu", "eth_gojjam", "tza_mbeya", "uga_masindi",
              "mdg_vakinankaratra"]
 BENCH = [("WRSI %med", "lwrsi_africa_dekad_pctm"),
          ("SM %mean", "soilmoisture-0-100cm_global_month_pctm"),
-         ("CHIRPS anom mm", "chirps_global_month_anom")]
+         ("CHIRPS z-score", "chirps_global_month_zscore")]
 EPISODES_OV = {"15-16": ("2015-07-01", "2016-06-30"),
                "23-24": ("2023-07-01", "2024-06-30")}
 
@@ -241,14 +241,14 @@ if view == "Overview":
         return ""
 
     def _anom_shade(v):
-        # continuous diverging gradient: deeper red = larger rainfall
-        # deficit, light blue = surplus; mm scale saturates at ±200mm
+        # continuous diverging gradient: deeper red = drier, light blue =
+        # wetter; z-score scale saturates at |z| = 2.5
         if pd.isna(v):
             return ""
         if v < 0:
-            alpha = min(0.45, abs(v) / 200 * 0.45)
+            alpha = min(0.45, abs(v) / 2.5 * 0.45)
             return f"background-color: rgba(255,69,0,{alpha:.2f})"
-        alpha = min(0.30, v / 200 * 0.30)
+        alpha = min(0.30, v / 2.5 * 0.30)
         return f"background-color: rgba(70,130,180,{alpha:.2f})"
 
     wrsi_cols = [c for c in odf.columns if c.startswith("WRSI")]
@@ -572,7 +572,7 @@ EPISODES = {"2015-16": ("2015-07-01", "2016-06-30"),
             "2023-24": ("2023-07-01", "2024-06-30")}
 BENCH_DS = {"Water Req. Satisfaction Index (% of median)": "lwrsi_africa_dekad_pctm",
             "Root-zone SM (% of mean)": "soilmoisture-0-100cm_global_month_pctm",
-            "CHIRPS monthly anom (mm)": "chirps_global_month_anom"}
+            "CHIRPS monthly z-score": "chirps_global_month_zscore"}
 with st.expander("El Niño benchmarks — current vs worst prints of 2015-16 "
                  "and 2023-24", expanded=False):
     brows = []
@@ -614,10 +614,10 @@ for zk in zones.zone_key:
     d = load("SELECT dataset, granule_start, value FROM observations "
              "WHERE zone_key=? AND dataset IN ('lwrsi_africa_dekad_pctm',"
              "'soilmoisture-0-100cm_global_month_pctm',"
-             "'chirps_global_month_anom') ORDER BY granule_start", (zk,))
+             "'chirps_global_month_zscore') ORDER BY granule_start", (zk,))
     for ds, label in [("lwrsi_africa_dekad_pctm", "WRSI %median (water req. satisfaction)"),
                       ("soilmoisture-0-100cm_global_month_pctm", "SM %mean"),
-                      ("chirps_global_month_anom", "CHIRPS mth anom (mm)")]:
+                      ("chirps_global_month_zscore", "CHIRPS mth z-score")]:
         sub = d[d.dataset == ds]
         r[label] = round(sub.value.iloc[-1], 1) if not sub.empty else None
     rows.append(r)
