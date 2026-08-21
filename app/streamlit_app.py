@@ -156,6 +156,16 @@ if view == "Overview":
                 fo.add_scatter(x=c.doy_key, y=c.cum,
                                line=dict(color="crimson", width=2.5),
                                showlegend=False)
+            MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
+                   "Sep", "Oct", "Nov", "Dec"]
+            in_now = (today.month >= a or today.month <= b) if b < a else \
+                (a <= today.month <= b)
+            if not in_now:
+                fo.add_annotation(
+                    text=f"season complete — next starts {MON[a - 1]}",
+                    xref="paper", yref="paper", x=0.98, y=0.03,
+                    showarrow=False, font=dict(size=11, color="gray"),
+                    xanchor="right")
             n_m = (b - a) % 12 + 1
             fo.update_xaxes(
                 type="category",
