@@ -374,6 +374,14 @@ with col_b:
         f3.add_scatter(x=sm.date, y=sm.value, name="0–100cm % of mean",
                        line=dict(color="saddlebrown"))
         f3.add_hline(y=100, line_dash="dash", line_color="gray")
+        f3.add_hrect(y0=85, y1=95, fillcolor="gold", opacity=0.15,
+                     line_width=0, annotation_text="watch territory",
+                     annotation_position="top left",
+                     annotation_font_size=11)
+        f3.add_hrect(y0=75, y1=85, fillcolor="orangered", opacity=0.13,
+                     line_width=0, annotation_text="issue level",
+                     annotation_position="top left",
+                     annotation_font_size=11)
         f3.update_layout(title="FLDAS root-zone soil moisture, % of mean "
                                "(monthly)", height=340,
                          margin=dict(t=40, b=0),
