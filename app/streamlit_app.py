@@ -240,11 +240,24 @@ if view == "Overview":
             return "background-color: rgba(255,215,0,0.30)"   # watch
         return ""
 
+    def _anom_shade(v):
+        # continuous diverging gradient: deeper red = larger rainfall
+        # deficit, light blue = surplus; mm scale saturates at ±200mm
+        if pd.isna(v):
+            return ""
+        if v < 0:
+            alpha = min(0.45, abs(v) / 200 * 0.45)
+            return f"background-color: rgba(255,69,0,{alpha:.2f})"
+        alpha = min(0.30, v / 200 * 0.30)
+        return f"background-color: rgba(70,130,180,{alpha:.2f})"
+
     wrsi_cols = [c for c in odf.columns if c.startswith("WRSI")]
     sm_cols = [c for c in odf.columns if c.startswith("SM")]
+    anom_cols = [c for c in odf.columns if c.startswith("CHIRPS")]
     styled = (odf.style
               .map(_wrsi_shade, subset=wrsi_cols)
               .map(_sm_shade, subset=sm_cols)
+              .map(_anom_shade, subset=anom_cols)
               .format(precision=1))
     st.dataframe(styled, hide_index=True,
                  use_container_width=True, height=520)
