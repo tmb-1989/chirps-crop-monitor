@@ -579,8 +579,23 @@ if have_metrics:
         f4.add_scatter(x=recent.date, y=recent.spi3, name="SPI-3 (3 months)",
                        line=dict(color="crimson", width=2))
         f4.add_hline(y=0, line_dash="dash", line_color="gray")
-        f4.add_hline(y=-1, line_dash="dot", line_color="orange")
-        f4.add_hline(y=-1.5, line_dash="dot", line_color="red")
+        f4.add_hline(y=-1, line_dash="dot", line_color="orange",
+                     annotation_text="−1 moderate (drier than 84% of history)",
+                     annotation_position="bottom left",
+                     annotation_font=dict(size=11, color="orange"))
+        f4.add_hline(y=-1.5, line_dash="dot", line_color="red",
+                     annotation_text="−1.5 severe (drier than 93% of history)",
+                     annotation_position="bottom left",
+                     annotation_font=dict(size=11, color="red"))
+        f4.add_hline(y=-2, line_dash="dot", line_color="darkred",
+                     annotation_text="−2 extreme drought (drier than 98% of "
+                                     "history)",
+                     annotation_position="bottom left",
+                     annotation_font=dict(size=11, color="darkred"))
+        f4.update_yaxes(range=[min(-2.4, float(min(recent.spi1.min(),
+                                                   recent.spi3.min())) - 0.2),
+                               max(2.4, float(max(recent.spi1.max(),
+                                                  recent.spi3.max())) + 0.2)])
         f4.update_layout(title="Standardized Precipitation Index (SPI), "
                                "local CHIRPS v3 dekads, gamma-fit 1991–2020",
                          height=340,
