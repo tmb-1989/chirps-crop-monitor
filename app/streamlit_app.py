@@ -86,9 +86,9 @@ view = st.sidebar.radio("View", ["Overview", "Zone detail"])
 
 # ======================== OVERVIEW ========================================
 # one representative zone per country, its main season
-REP_ZONES = ["ken_uasin_gishu", "eth_oromia_maize", "tza_mbeya", "uga_masindi",
-             "zmb_central", "mwi_lilongwe", "zwe_mash_west", "moz_manica",
-             "mdg_vakinankaratra"]
+REP_ZONES = ["ken_uasin_gishu", "eth_oromia_maize", "tza_mbeya",
+             "uga_eastern", "zmb_central", "mwi_lilongwe", "zwe_mash_west",
+             "moz_zambezia", "mdg_vakinankaratra"]
 BENCH = [("WRSI %med", "lwrsi_africa_dekad_pctm"),
          ("SM %mean", "soilmoisture-0-100cm_global_month_pctm"),
          ("CHIRPS z-score", "chirps_global_month_zscore")]

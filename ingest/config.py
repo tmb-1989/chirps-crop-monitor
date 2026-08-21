@@ -39,6 +39,9 @@ ZONES = {
                        [("msimu", 11, 5)]),
     "uga_masindi":    ("UGA", "Uganda Masindi", 1.70, 31.70,
                        [("first", 3, 6), ("second", 8, 11)]),
+    # Eastern region is Uganda's main maize producer (Iganga-Mbale corridor)
+    "uga_eastern":    ("UGA", "Uganda Eastern maize belt", 1.2051, 33.6634,
+                       [("first", 3, 6), ("second", 8, 11)]),
     "zmb_central":    ("ZMB", "Zambia Central maize belt", -14.40, 28.40,
                        [("main", 10, 4)]),
     "zmb_southern":   ("ZMB", "Zambia Southern province", -16.80, 27.00,
@@ -51,6 +54,9 @@ ZONES = {
                        [("main", 10, 4)]),
     "moz_manica":     ("MOZ", "Mozambique Manica", -19.10, 33.50,
                        [("main", 10, 4)]),
+    # Zambezia is Mozambique's largest maize producer (northern heartland)
+    "moz_zambezia":   ("MOZ", "Mozambique Zambezia", -16.5095, 36.8684,
+                       [("main", 10, 4)]),
     "mdg_vakinankaratra": ("MDG", "Madagascar Vakinankaratra", -19.80, 47.00,
                            [("main", 10, 4)]),
 }
@@ -60,6 +66,7 @@ ZONES = {
 # admin-1 boundaries
 VECTOR_OVERRIDES = {
     "mwi_lilongwe": ADMIN1_VECTOR,
+    "moz_zambezia": ADMIN1_VECTOR,
 }
 
 # one API request per (zone, dataset) — the API silently drops extra
