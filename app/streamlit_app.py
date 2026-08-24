@@ -596,11 +596,12 @@ if have_metrics:
                                                    recent.spi3.min())) - 0.2),
                                max(2.4, float(max(recent.spi1.max(),
                                                   recent.spi3.max())) + 0.2)])
-        f4.update_layout(title="Standardized Precipitation Index (SPI), "
-                               "local CHIRPS v3 dekads, gamma-fit 1991–2020",
+        f4.update_layout(title="Standardized Precipitation Index (SPI)",
                          height=340,
                          margin=dict(t=40, b=0))
         st.plotly_chart(f4, use_container_width=True)
+        st.caption("Computed from local CHIRPS v3 dekads; gamma-fitted "
+                   "per dekad-of-year on 1991–2020.")
 
     sm2 = load("SELECT season_name, season_year, onset_start, "
                "onset_delay_dekads, max_dry_spell FROM season_metrics "
