@@ -510,6 +510,26 @@ fig.update_layout(
     yaxis_title="mm", height=420, margin=dict(t=40, b=0))
 st.plotly_chart(fig, use_container_width=True)
 
+# rate view: each dekad as % of its own 1991-2020 normal — makes a
+# one-dekad recovery or collapse visible where the cumulative line hides it
+rate = load("SELECT granule_start, pct_normal FROM dekad_metrics WHERE "
+            "zone_key=? AND pct_normal IS NOT NULL "
+            "ORDER BY granule_start DESC LIMIT 18", (zone_key,))
+if not rate.empty:
+    rate = rate.sort_values("granule_start")
+    fr = go.Figure()
+    fr.add_bar(x=rate.granule_start, y=rate.pct_normal,
+               marker_color=["indianred" if v < 80 else
+                             "goldenrod" if v < 95 else "seagreen"
+                             for v in rate.pct_normal])
+    fr.add_hline(y=100, line_dash="dash", line_color="gray")
+    fr.update_xaxes(type="category", tickangle=-45, tickfont=dict(size=10))
+    fr.update_layout(title="Dekadal rainfall, % of same-dekad normal "
+                           "(last 6 months)",
+                     yaxis_title="% of normal", height=280,
+                     margin=dict(t=40, b=0), showlegend=False)
+    st.plotly_chart(fr, use_container_width=True)
+
 # ---- WRSI and soil moisture panels --------------------------------------
 col_a, col_b = st.columns(2)
 with col_a:
