@@ -44,8 +44,76 @@ zonal means locally, and stores them as `chirps3local_dekad_data` /
 - Zone geometries in `data/zones/zones.geojson` (WFS-fetched crop zones,
   admin-1 for Malawi, plus CPI-aligned composites `ken_grain_basket`,
   `zmb_maize_belt`).
-- Derived metrics in `dekad_metrics` (% of normal, SPI-1/SPI-3 gamma-fit on
-  1991–2020) and `season_metrics` (onset date/delay, max dry spell).
+- Derived metrics in `dekad_metrics` (% of normal, SPI-1/SPI-3) and
+  `season_metrics` (onset date/delay, max dry spell) — precise definitions
+  below.
+
+### Metric definitions (as implemented in `compute/metrics.py`)
+
+All derived metrics run on the merged local dekad series (final CHIRPS v3
+where available, prelim otherwise; final wins on overlap).
+
+**pct_normal** — dekad rainfall as % of the 1991–2020 mean for the *same
+dekad-of-year* (36 classes/year). Handles variable dekad length (8–11 days,
+incl. leap-year Feb 21–29) by construction: dekads are only ever compared
+to themselves.
+
+**SPI-1 / SPI-3** — Standardized Precipitation Index over rolling sums of
+**3 and 9 dekads** (≈1 and ≈3 months; the names follow the conventional
+monthly labels, but the windows are dekad-based). Full window required
+(`min_periods = window`) — no partial sums. Distributions are fitted
+**separately for each of the 36 dekad-of-year classes** on the 1991–2020
+rolling sums ending in that class. Zero/trace handling: a mixed
+distribution — the zero fraction q₀ is estimated empirically, a 2-parameter
+gamma (location fixed at 0) is fitted to the positive values only, and
+CDF = q₀ + (1−q₀)·Gamma(x). The CDF is clipped to [1e-4, 1−1e-4]
+(bounding SPI at ≈±3.7) before the normal-quantile transform. Classes with
+<15 climatology observations or <10 positive values return NaN.
+
+**Onset of rains** — per season-year, the first in-season dekad with
+**≥25mm** whose two following dekads sum to **≥20mm** (the follow-up
+requirement is the false-onset guard; there is no separate re-onset rule).
+Earliest eligible date is the first dekad of the season window's start
+month. `onset_delay_dekads` is the offset in dekads vs the median onset
+position over 1991–2020 season-years where an onset was found.
+
+**Max dry spell** — per season-year, the longest run of consecutive
+in-season dekads with **<5mm**. Runs may cross month and calendar-year
+boundaries within a season (e.g. Dec→Jan inside an Oct–Apr season) but
+never cross season boundaries — the counter exists only within one
+season-year's window. Threshold is on the zonal-mean dekad total, so
+localized in-zone rain can mask a spell.
+
+**Cross-year seasons & edges** — a season-year is labeled by its start
+year (the 2025-26 Oct–Apr season is `season_year=2025`). Historical
+seasons missing more than 3 dekads (series edges) are dropped from
+season_metrics; the current season is always kept.
+### Zonal aggregation (as implemented in `ingest/chirps_raster.py`)
+
+- **Cell selection**: zone polygons are rasterized onto the 0.05° CHIRPS
+  Africa grid with `rasterio.features.rasterize` at default settings —
+  a cell belongs to a zone iff its **center point** falls inside the
+  polygon (not all-touched, not fractional overlap). Polygon holes and
+  multi-part geometries are honored.
+- **Statistic**: simple **unweighted arithmetic mean** of member cells.
+  No latitude (cos φ) area weighting — on a geographic grid cell area
+  varies with latitude, but across a single zone's ≤5° span the bias is
+  <1% and is accepted; do not reuse this for continental aggregates.
+- **NoData**: the file's nodata value (−9999) and non-finite cells are
+  excluded per dekad; a zone with zero valid cells in a dekad yields no
+  row (never a zero). Mask build fails loudly if any zone rasterizes to
+  zero cells (guards against sliver polygons).
+- **What the zones are**: FEWS NET "crop zones" are **crop-type polygons
+  intersected with admin-1 units** — a cartographic crop map, *not* a
+  satellite-derived cropland mask. Zonal means therefore include
+  non-cropped cells inside the polygon. Three zones (Malawi Lilongwe,
+  Mozambique Zambezia, SA Mpumalanga) use admin-1 boundaries on the EWX
+  side because their crop-zone polygons have no server-side stats; of
+  these, Mpumalanga's *local* series still uses the crop polygon, so its
+  local-vs-EWX cross-check differs by construction.
+- **EWX side**: the API's zonal means are computed server-side by USGS
+  (method not published); our local means reproduce them to the decimal
+  where both exist, which is the standing cross-check.
 - Raster cache: rolling ~2 years in `data/rasters/` (~300MB), older files
   deleted after processing.
 - **CHC runs CrowdSec**: parallel or burst downloads from data.chc.ucsb.edu
