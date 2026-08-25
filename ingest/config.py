@@ -75,6 +75,9 @@ ZONES = {
 VECTOR_OVERRIDES = {
     "mwi_lilongwe": ADMIN1_VECTOR,
     "moz_zambezia": ADMIN1_VECTOR,
+    # EWX only; the local raster pipeline keeps the crop polygon for this
+    # zone (built before the override), so local vs EWX bases differ here
+    "zaf_mpumalanga": ADMIN1_VECTOR,
 }
 
 # one API request per (zone, dataset) — the API silently drops extra
