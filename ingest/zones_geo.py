@@ -29,6 +29,9 @@ COMPOSITES = {
                          ["ken_uasin_gishu", "ken_trans_nzoia"]),
     "zmb_maize_belt": ("ZMB", "Zambia maize belt (composite)",
                        ["zmb_central", "zmb_southern", "zmb_eastern"]),
+    "zaf_maize_triangle": ("ZAF", "South Africa maize triangle (composite)",
+                           ["zaf_free_state", "zaf_north_west",
+                            "zaf_mpumalanga"]),
 }
 
 

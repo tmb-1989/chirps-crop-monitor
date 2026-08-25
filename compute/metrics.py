@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS season_metrics (
 EXTRA_SEASONS = {
     "ken_grain_basket": [("long_rains", 3, 9)],
     "zmb_maize_belt": [("main", 10, 4)],
+    "zaf_maize_triangle": [("main", 10, 4)],
 }
 
 

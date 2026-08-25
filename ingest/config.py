@@ -59,6 +59,14 @@ ZONES = {
                        [("main", 10, 4)]),
     "mdg_vakinankaratra": ("MDG", "Madagascar Vakinankaratra", -19.80, 47.00,
                            [("main", 10, 4)]),
+    # South Africa maize triangle: Free State (white maize core, ~40% of
+    # national crop), North West, Mpumalanga (yellow maize east)
+    "zaf_free_state": ("ZAF", "South Africa Free State", -28.2573, 26.7507,
+                       [("main", 10, 4)]),
+    "zaf_north_west": ("ZAF", "South Africa North West", -26.3904, 25.5750,
+                       [("main", 10, 4)]),
+    "zaf_mpumalanga": ("ZAF", "South Africa Mpumalanga", -25.9954, 29.9151,
+                       [("main", 10, 4)]),
 }
 
 # zones whose crop-zone polygon has no pre-computed zonal stats on the
