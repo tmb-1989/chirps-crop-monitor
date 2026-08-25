@@ -2,5 +2,5 @@
 -r requirements.txt
 requests
 scipy
-rasterio<1.4
-shapely>=2,<2.1
+rasterio
+shapely>=2
