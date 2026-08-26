@@ -437,8 +437,9 @@ if view == "Flood watch":
     for x0, x1, lbl in FLOOD_EVENTS:
         if pd.Timestamp(x1) >= w0:
             fh.add_vrect(x0=max(pd.Timestamp(x0), w0).isoformat(), x1=x1,
-                         fillcolor="crimson", opacity=0.06, line_width=1,
-                         line_color="crimson", line_dash="dot")
+                         fillcolor="crimson", opacity=0.15, line_width=2,
+                         line_color="crimson", line_dash="dot",
+                         layer="above")
             fh.add_annotation(x=max(pd.Timestamp(x0), w0).isoformat(),
                               y=1.05, yref="paper", text=lbl,
                               showarrow=False, xanchor="left",
