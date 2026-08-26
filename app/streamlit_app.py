@@ -92,7 +92,7 @@ tracking as bad as the worst of those events.
 """)
 
 today = dt.date.today()
-view = st.sidebar.radio("View", ["Overview", "Zone detail"])
+view = st.sidebar.radio("View", ["Overview", "Zone detail", "Flood watch"])
 
 # ======================== OVERVIEW ========================================
 # one representative zone per country, its main season
@@ -323,6 +323,85 @@ if view == "Overview":
                "window. Off-season WRSI reads ~100 — compare southern-Africa "
                "zones during Oct–Apr only. Composite zones (local pipeline "
                "only) are excluded until their backfill completes.")
+    st.stop()
+
+# ======================== FLOOD WATCH =====================================
+if view == "Flood watch":
+    import json as _json
+    st.subheader("Flood watch — Kenya pilot basins")
+    fs = load("SELECT * FROM flood_state ORDER BY granule_start")
+    if fs.empty:
+        st.warning("No flood_state data — run compute/flood_signals.py.")
+        st.stop()
+    fs["date"] = pd.to_datetime(fs.granule_start)
+    latest_p = fs.granule_start.max()
+    cur = fs[fs.granule_start == latest_p].set_index("zone_key")
+
+    # regional state: >=2 basins armed, >=1 alerting, in flood-season months
+    lat_month = pd.Timestamp(latest_p).month
+    n1 = int((cur.tier >= 1).sum())
+    n2 = int((cur.tier >= 2).sum())
+    regional = (n1 >= 2 and n2 >= 1 and
+                lat_month in {2, 3, 4, 5, 10, 11, 12})
+    if regional:
+        st.error(f"REGIONAL FLOOD ALERT — {n2} basin(s) alerting, "
+                 f"{n1} armed (as of {latest_p})")
+    else:
+        st.success(f"Regional state: clear (as of pentad starting {latest_p} "
+                   f"— {n1} basin(s) armed, {n2} alerting)")
+
+    # basin table with GEFS outlook + downstream pairing
+    gj = _json.loads(open(pathlib.Path(__file__).resolve().parent.parent /
+                          "data" / "zones" / "basins.geojson").read())
+    props = {f["properties"]["zone_key"]: f["properties"]
+             for f in gj["features"]}
+    gefs = load("SELECT zone_key, horizon, fcst_mm, pct_clim FROM flood_gefs "
+                "WHERE issue_date = (SELECT max(issue_date) FROM flood_gefs)")
+    g10 = gefs[gefs.horizon == "10_day"].set_index("zone_key")
+    rows = []
+    for zk, r in cur.iterrows():
+        p = props.get(zk, {})
+        rows.append({
+            "basin": p.get("name", zk),
+            "tier": {0: "—", 1: "WATCH", 2: "ALERT"}.get(int(r.tier), "—"),
+            "signature": r.signature or "—",
+            "pentad mm": round(r.rain_mm, 1),
+            "% of normal": None if pd.isna(r.pct_normal) else round(r.pct_normal),
+            "antecedent pctile": None if pd.isna(r.ante_pct) else round(r.ante_pct),
+            "GEFS 10-day mm": None if zk not in g10.index else round(g10.loc[zk, "fcst_mm"], 1),
+            "drains to": props.get(p.get("downstream") or "", {}).get("name", "—"),
+            "routing (days)": p.get("routing_days") or "—",
+        })
+    st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+    # history stripes: % of normal per basin, alert markers
+    hist = fs[fs.date >= fs.date.max() - pd.Timedelta(days=1095)]
+    basins_sorted = sorted(hist.zone_key.unique())
+    fh = go.Figure()
+    fh.add_trace(go.Heatmap(
+        x=hist.date, y=hist.zone_key,
+        z=hist.pct_normal.clip(0, 300),
+        colorscale="RdBu", zmid=100, zmin=0, zmax=300,
+        colorbar=dict(title="% of normal", thickness=12)))
+    al = hist[hist.tier == 2]
+    if not al.empty:
+        fh.add_scatter(x=al.date, y=al.zone_key, mode="markers",
+                       marker=dict(color="black", size=6, symbol="x"),
+                       name="basin alert")
+    fh.update_layout(title="Basin rainfall vs normal (pentads, last 3 years) "
+                           "— × = basin-level alert",
+                     height=340, margin=dict(t=40, b=10),
+                     yaxis=dict(categoryorder="array",
+                                categoryarray=basins_sorted))
+    st.plotly_chart(fh, use_container_width=True)
+    st.caption(
+        "Tiers: WATCH = catchment ≥90th pctile wet + 2 consecutive pentads "
+        "≥150% of normal · ALERT adds a ≥200% pentad, or ≥250% onto a "
+        "parched catchment (whiplash). The regional alert (≥2 basins armed, "
+        "≥1 alerting, Feb–May/Oct–Dec) caught 10/10 major Kenya floods "
+        "2006–2026 in backtest at 71% precision (~1 false alarm / 5 years). "
+        "Basin-level alerts alone are noisier (26% precision) — context, "
+        "not calls to action. GEFS = CHIRPS-GEFS forecast accumulation.")
     st.stop()
 
 # ======================== ZONE DETAIL =====================================

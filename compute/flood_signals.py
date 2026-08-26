@@ -259,6 +259,18 @@ def main() -> int:
     live = not reg.empty and (pd.Timestamp(latest) - reg.iloc[-1]).days <= 10
     print(f"\nREGIONAL ALERT state as of {latest}: "
           f"{'ACTIVE since ' + str(reg.iloc[-1].date()) if live else 'clear'}")
+    # persist state transitions for the cron log / downstream consumers
+    con.execute("CREATE TABLE IF NOT EXISTS flood_alerts ("
+                "granule_start TEXT PRIMARY KEY, state TEXT, "
+                "detail TEXT, recorded_at TEXT)")
+    if live:
+        con.execute(
+            "INSERT OR IGNORE INTO flood_alerts VALUES (?,?,?,?)",
+            (latest, "REGIONAL_ALERT",
+             f"active since {reg.iloc[-1].date()}",
+             dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")))
+        con.commit()
+        print("!! REGIONAL FLOOD ALERT recorded — check the dashboard")
     backtest(allf)
     con.close()
     return 0
