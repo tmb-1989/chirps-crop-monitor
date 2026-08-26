@@ -524,11 +524,14 @@ if not rate.empty:
                              for v in rate.pct_normal])
     fr.add_hline(y=100, line_dash="dash", line_color="gray")
     fr.update_xaxes(type="category", tickangle=-45, tickfont=dict(size=10))
-    fr.update_layout(title="Dekadal rainfall, % of same-dekad normal "
+    fr.update_layout(title="Rainfall vs normal, 10-day periods "
                            "(last 6 months)",
                      yaxis_title="% of normal", height=280,
                      margin=dict(t=40, b=0), showlegend=False)
     st.plotly_chart(fr, use_container_width=True)
+    st.caption("Each bar compares a 10-day total to the 1991–2020 average "
+               "for that same period of the year, so seasonality is already "
+               "accounted for: 100% = typical for the time of year.")
 
 # ---- WRSI and soil moisture panels --------------------------------------
 col_a, col_b = st.columns(2)
