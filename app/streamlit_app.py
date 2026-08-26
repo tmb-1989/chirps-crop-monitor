@@ -427,6 +427,22 @@ if view == "Flood watch":
                        marker=dict(size=13, color="crimson", symbol="x-thin",
                                    line=dict(width=3, color="crimson")),
                        name="basin alert (saturated + burst)")
+    # documented flood events (calibration catalog) inside the window
+    FLOOD_EVENTS = [
+        ("2023-10-15", "2023-12-15", "OND 2023 El Niño floods"),
+        ("2024-03-15", "2024-05-15", "MAM 2024 floods (Mai Mahiu)"),
+        ("2026-02-15", "2026-05-31", "MAM 2026 floods"),
+    ]
+    w0 = hist.date.min()
+    for x0, x1, lbl in FLOOD_EVENTS:
+        if pd.Timestamp(x1) >= w0:
+            fh.add_vrect(x0=max(pd.Timestamp(x0), w0).isoformat(), x1=x1,
+                         fillcolor="crimson", opacity=0.06, line_width=1,
+                         line_color="crimson", line_dash="dot")
+            fh.add_annotation(x=max(pd.Timestamp(x0), w0).isoformat(),
+                              y=1.05, yref="paper", text=lbl,
+                              showarrow=False, xanchor="left",
+                              font=dict(size=11, color="crimson"))
     # GEFS outlook band: hatch the forecast horizon beyond last observation
     if not g10.empty:
         x0 = hist.date.max() + pd.Timedelta(days=5)
