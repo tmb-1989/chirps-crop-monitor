@@ -185,6 +185,28 @@ def fetch_gefs(con, basins: list) -> None:
 
 FLOOD_MONTHS = {2, 3, 4, 5, 10, 11, 12}  # MAM long rains + OND short rains
 
+NTFY_TOPIC_FILE = pathlib.Path(__file__).resolve().parent.parent / \
+    "data" / "ntfy_topic.txt"
+
+
+def _notify(message: str) -> None:
+    """Push via ntfy.sh if data/ntfy_topic.txt exists (opt-in; the file is
+    gitignored — one private topic string, no account or credentials)."""
+    if not NTFY_TOPIC_FILE.exists():
+        return
+    topic = NTFY_TOPIC_FILE.read_text().strip()
+    if not topic:
+        return
+    try:
+        import requests
+        requests.post(f"https://ntfy.sh/{topic}", data=message.encode(),
+                      headers={"Title": "CHIRPS flood watch",
+                               "Priority": "high", "Tags": "ocean"},
+                      timeout=30)
+        print(f"push notification sent to ntfy topic '{topic[:8]}…'")
+    except Exception as e:  # noqa: BLE001 - alerting must never kill the run
+        print(f"ntfy push failed (non-fatal): {e}", file=sys.stderr)
+
 
 def regional_series(all_states: pd.DataFrame) -> pd.Series:
     """Regional-alert pentads: >=2 basins armed (tier>=1), >=1 alerting
@@ -264,13 +286,25 @@ def main() -> int:
                 "granule_start TEXT PRIMARY KEY, state TEXT, "
                 "detail TEXT, recorded_at TEXT)")
     if live:
-        con.execute(
+        cur = con.execute(
             "INSERT OR IGNORE INTO flood_alerts VALUES (?,?,?,?)",
             (latest, "REGIONAL_ALERT",
              f"active since {reg.iloc[-1].date()}",
              dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")))
         con.commit()
         print("!! REGIONAL FLOOD ALERT recorded — check the dashboard")
+        if cur.rowcount > 0:  # newly recorded -> push, don't repeat
+            _notify(f"REGIONAL FLOOD ALERT (Kenya basins): active since "
+                    f"{reg.iloc[-1].date()}, latest pentad {latest}. "
+                    f"See the flood-watch dashboard.")
+    # heartbeat so 'no alert' is distinguishable from 'not running'
+    con.execute("CREATE TABLE IF NOT EXISTS flood_runs (id INTEGER PRIMARY "
+                "KEY CHECK (id=1), last_run TEXT, latest_pentad TEXT, "
+                "regional TEXT)")
+    con.execute("INSERT OR REPLACE INTO flood_runs VALUES (1,?,?,?)",
+                (dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                 latest, "ACTIVE" if live else "clear"))
+    con.commit()
     backtest(allf)
     con.close()
     return 0

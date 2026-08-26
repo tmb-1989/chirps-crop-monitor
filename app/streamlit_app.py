@@ -349,6 +349,29 @@ if view == "Flood watch":
     else:
         st.success(f"Regional state: clear (as of pentad starting {latest_p} "
                    f"— {n1} basin(s) armed, {n2} alerting)")
+    runs = load("SELECT last_run, latest_pentad, regional FROM flood_runs "
+                "WHERE id=1")
+    if not runs.empty:
+        r = runs.iloc[0]
+        age_h = (pd.Timestamp.now(tz="UTC")
+                 - pd.Timestamp(r.last_run)).total_seconds() / 3600
+        msg = (f"Signals last computed {r.last_run} UTC "
+               f"({age_h:.0f}h ago), data through pentad {r.latest_pentad}.")
+        if age_h > 24 * 7:
+            st.warning(msg + " — STALE: the update pipeline may not be "
+                             "running; a 'clear' state this old is not "
+                             "evidence of anything.")
+        else:
+            st.caption(msg)
+    hist_al = load("SELECT granule_start, state, detail, recorded_at "
+                   "FROM flood_alerts ORDER BY granule_start DESC LIMIT 12")
+    with st.expander(f"Alert history ({len(hist_al)} recorded)"):
+        if hist_al.empty:
+            st.caption("No regional alerts recorded since the layer went "
+                       "live (Aug 2026). Historical episodes before that "
+                       "appear in the backtest, not here.")
+        else:
+            st.dataframe(hist_al, hide_index=True, use_container_width=True)
 
     # basin table with GEFS outlook + downstream pairing
     gj = _json.loads(open(pathlib.Path(__file__).resolve().parent.parent /

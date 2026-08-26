@@ -6,3 +6,4 @@ data/zones/masks.npz
 __pycache__/
 *.pyc
 .DS_Store
+data/ntfy_topic.txt
