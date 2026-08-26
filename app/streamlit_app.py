@@ -397,25 +397,53 @@ if view == "Flood watch":
         })
     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
-    # history stripes: % of normal per basin, alert markers
-    hist = fs[fs.date >= fs.date.max() - pd.Timedelta(days=1095)]
-    basins_sorted = sorted(hist.zone_key.unique())
+    # mechanism view: wetness background + burst circles + alert markers
+    hist = fs[fs.date >= fs.date.max() - pd.Timedelta(days=365)]
+    border = ["bas_nzoia_hw", "bas_nzoia_low", "bas_lakeshore",
+              "bas_nairobi", "bas_tana_hw", "bas_tana_mid", "bas_ewaso"]
+    blabel = {zk: props.get(zk, {}).get("name", zk) for zk in border}
     fh = go.Figure()
-    fh.add_trace(go.Heatmap(
-        x=hist.date, y=hist.zone_key,
-        z=hist.pct_normal.clip(0, 300),
-        colorscale="RdBu", zmid=100, zmin=0, zmax=300,
-        colorbar=dict(title="% of normal", thickness=12)))
+    piv = hist.pivot_table(index="zone_key", columns="date",
+                           values="ante_pct").reindex(border)
+    fh.add_heatmap(
+        x=piv.columns, y=[blabel[z] for z in piv.index], z=piv.values,
+        colorscale=[[0, "#d9c8a0"], [0.5, "#f5f2ea"],
+                    [0.8, "#a8c8e8"], [1, "#2f6db3"]],
+        zmin=0, zmax=100,
+        colorbar=dict(title="catchment<br>wetness<br>pctile", thickness=12))
+    bursts = hist[(hist.pct_normal >= 150) & (hist.rain_mm >= 15)]
+    if not bursts.empty:
+        fh.add_scatter(
+            x=bursts.date, y=[blabel.get(z, z) for z in bursts.zone_key],
+            mode="markers",
+            marker=dict(size=list(bursts.pct_normal.clip(150, 500) / 45),
+                        color="black", symbol="circle-open",
+                        line=dict(width=1.8)),
+            name="rainfall burst ≥150% of normal (size = magnitude)")
     al = hist[hist.tier == 2]
     if not al.empty:
-        fh.add_scatter(x=al.date, y=al.zone_key, mode="markers",
-                       marker=dict(color="black", size=6, symbol="x"),
-                       name="basin alert")
-    fh.update_layout(title="Basin rainfall vs normal (pentads, last 3 years) "
-                           "— × = basin-level alert",
-                     height=340, margin=dict(t=40, b=10),
-                     yaxis=dict(categoryorder="array",
-                                categoryarray=basins_sorted))
+        fh.add_scatter(x=al.date, y=[blabel.get(z, z) for z in al.zone_key],
+                       mode="markers",
+                       marker=dict(size=13, color="crimson", symbol="x-thin",
+                                   line=dict(width=3, color="crimson")),
+                       name="basin alert (saturated + burst)")
+    # GEFS outlook band: hatch the forecast horizon beyond last observation
+    if not g10.empty:
+        x0 = hist.date.max() + pd.Timedelta(days=5)
+        fh.add_vrect(x0=x0, x1=x0 + pd.Timedelta(days=10),
+                     fillcolor="gray", opacity=0.10, line_width=0)
+        wet_fc = g10[g10.pct_clim >= 150].index.tolist()
+        fh.add_annotation(
+            x=(x0 + pd.Timedelta(days=5)).isoformat(), y=1.05, yref="paper",
+            showarrow=False, font=dict(size=11, color="gray"),
+            text=("GEFS 10-day: " + (", ".join(
+                blabel.get(z, z) for z in wet_fc) + " wet"
+                if wet_fc else "no heavy rain signalled")))
+    fh.update_layout(
+        title="Mechanism view, last 12 months — alerts fire where a "
+              "burst (circle) lands on a saturated catchment (blue)",
+        height=380, margin=dict(t=40, b=10),
+        legend=dict(orientation="h", y=-0.15))
     st.plotly_chart(fh, use_container_width=True)
     st.caption(
         "Tiers: WATCH = catchment ≥90th pctile wet + 2 consecutive pentads "
