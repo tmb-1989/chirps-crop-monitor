@@ -508,13 +508,18 @@ if view == "Flood watch":
                             "this scale)", show_bursts=False),
             use_container_width=True)
     st.caption(
-        "Tiers: WATCH = catchment ≥90th pctile wet + 2 consecutive pentads "
-        "≥150% of normal · ALERT adds a ≥200% pentad, or ≥250% onto a "
-        "parched catchment (whiplash). The regional alert (≥2 basins armed, "
-        "≥1 alerting, Feb–May/Oct–Dec) caught 10/10 major Kenya floods "
-        "2006–2026 in backtest at 71% precision (~1 false alarm / 5 years). "
-        "Basin-level alerts alone are noisier (26% precision) — context, "
-        "not calls to action. GEFS = CHIRPS-GEFS forecast accumulation.")
+        "How to read this: a basin alert (red ×) fires when very heavy "
+        "rain lands on ground that is already unusually wet — or, for the "
+        "orange 'whiplash' case, on ground baked dry by drought. A REGIONAL "
+        "ALERT (diamond) needs at least two basins in that state at once "
+        "during a rainy season, which filters out most one-off local "
+        "storms. In testing against 1999–2026, the regional alert flagged "
+        "every major Kenya flood since 2006, usually days to weeks ahead; "
+        "roughly half its firings were followed by a major flood, with a "
+        "false alarm about every one to two years. Individual basin alerts "
+        "fire much more often and are best read alongside the rest of the "
+        "chart. The gray band shows the rainfall forecast for the next "
+        "10 days.")
     st.stop()
 
 # ======================== ZONE DETAIL =====================================
