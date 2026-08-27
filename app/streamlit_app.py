@@ -460,7 +460,7 @@ if view == "Flood watch":
         REG_NAME = {
             "saturation": "Regional flood warning triggered "
                           "(ground saturation)",
-            "whiplash": "Regional flood alert (whiplash effect)",
+            "whiplash": "Regional flood warning (whiplash effect)",
         }
         for sig, color in (("saturation", "#1a2f6b"), ("whiplash", "#e07b00")):
             sub = reg[reg.sig == sig]
