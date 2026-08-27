@@ -397,70 +397,116 @@ if view == "Flood watch":
         })
     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
-    # mechanism view: wetness background + burst circles + alert markers
-    hist = fs[fs.date >= fs.date.max() - pd.Timedelta(days=365)]
-    border = ["bas_nzoia_hw", "bas_nzoia_low", "bas_lakeshore",
-              "bas_nairobi", "bas_tana_hw", "bas_tana_mid", "bas_ewaso"]
-    blabel = {zk: props.get(zk, {}).get("name", zk) for zk in border}
-    fh = go.Figure()
-    piv = hist.pivot_table(index="zone_key", columns="date",
-                           values="ante_pct").reindex(border)
-    fh.add_heatmap(
-        x=piv.columns, y=[blabel[z] for z in piv.index], z=piv.values,
-        colorscale=[[0, "#d9c8a0"], [0.5, "#f5f2ea"],
-                    [0.8, "#a8c8e8"], [1, "#2f6db3"]],
-        zmin=0, zmax=100,
-        colorbar=dict(title="catchment<br>wetness<br>pctile", thickness=12))
-    bursts = hist[(hist.pct_normal >= 150) & (hist.rain_mm >= 15)]
-    if not bursts.empty:
-        fh.add_scatter(
-            x=bursts.date, y=[blabel.get(z, z) for z in bursts.zone_key],
-            mode="markers",
-            marker=dict(size=list(bursts.pct_normal.clip(150, 500) / 45),
-                        color="black", symbol="circle-open",
-                        line=dict(width=1.8)),
-            name="rainfall burst ≥150% of normal (size = magnitude)")
-    al = hist[hist.tier == 2]
-    if not al.empty:
-        fh.add_scatter(x=al.date, y=[blabel.get(z, z) for z in al.zone_key],
-                       mode="markers",
-                       marker=dict(size=13, color="crimson", symbol="x-thin",
-                                   line=dict(width=3, color="crimson")),
-                       name="basin alert (saturated + burst)")
-    # documented flood events (calibration catalog) inside the window
+    # ---- mechanism charts ------------------------------------------------
     FLOOD_EVENTS = [
-        ("2023-10-15", "2023-12-15", "OND 2023 El Niño floods"),
-        ("2024-03-15", "2024-05-15", "MAM 2024 floods (Mai Mahiu)"),
+        ("2001-11-01", "2001-12-15", "'01"), ("2002-04-15", "2002-05-31", "'02"),
+        ("2006-10-15", "2006-12-15", "'06"), ("2007-09-01", "2007-10-31", "'07"),
+        ("2008-10-15", "2008-11-30", "'08"), ("2010-03-01", "2010-05-15", "'10"),
+        ("2012-04-01", "2012-05-31", "'12"), ("2013-03-15", "2013-05-15", "'13"),
+        ("2015-10-15", "2015-12-31", "'15"), ("2018-03-01", "2018-05-31", "'18"),
+        ("2019-10-01", "2019-12-31", "'19"), ("2020-03-15", "2020-05-31", "'20"),
+        ("2023-10-15", "2023-12-15", "'23"), ("2024-03-15", "2024-05-15", "'24"),
         ("2026-02-15", "2026-05-31", "MAM 2026 floods"),
     ]
-    w0 = hist.date.min()
-    for x0, x1, lbl in FLOOD_EVENTS:
-        if pd.Timestamp(x1) >= w0:
-            for edge in (max(pd.Timestamp(x0), w0).isoformat(), x1):
-                fh.add_vline(x=edge, line_width=2, line_color="crimson",
-                             line_dash="dot", layer="above")
-            fh.add_annotation(x=max(pd.Timestamp(x0), w0).isoformat(),
-                              y=1.05, yref="paper", text=lbl,
-                              showarrow=False, xanchor="left",
-                              font=dict(size=11, color="crimson"))
-    # GEFS outlook band: hatch the forecast horizon beyond last observation
-    if not g10.empty:
-        x0 = hist.date.max() + pd.Timedelta(days=5)
-        fh.add_vrect(x0=x0, x1=x0 + pd.Timedelta(days=10),
-                     fillcolor="gray", opacity=0.10, line_width=0)
-        wet_fc = g10[g10.pct_clim >= 150].index.tolist()
-        fh.add_annotation(
-            x=(x0 + pd.Timedelta(days=5)).isoformat(), y=1.05, yref="paper",
-            showarrow=False, font=dict(size=11, color="gray"),
-            text=("GEFS 10-day: " + (", ".join(
-                blabel.get(z, z) for z in wet_fc) + " wet"
-                if wet_fc else "no heavy rain signalled")))
-    fh.update_layout(
-        title="Mechanism view, last 12 months — alerts fire where a "
-              "burst (circle) lands on a saturated catchment (blue)",
-        height=380, margin=dict(t=40, b=10),
-        legend=dict(orientation="h", y=-0.15))
-    st.plotly_chart(fh, use_container_width=True)
+    BORDER = ["bas_nzoia_hw", "bas_nzoia_low", "bas_lakeshore",
+              "bas_nairobi", "bas_tana_hw", "bas_tana_mid", "bas_ewaso"]
+
+    def regional_diamonds(df):
+        """Regional-alert pentads with dominant signature."""
+        rows = []
+        for d, grp in df.groupby("date"):
+            n1 = int((grp.tier >= 1).sum())
+            n2 = int((grp.tier >= 2).sum())
+            if n1 >= 2 and n2 >= 1 and d.month in {2, 3, 4, 5, 10, 11, 12}:
+                sigs = set(grp[grp.tier >= 2].signature.dropna())
+                rows.append((d, "whiplash" if sigs == {"whiplash"}
+                             else "saturation"))
+        return pd.DataFrame(rows, columns=["date", "sig"])
+
+    def mechanism_chart(hist, title, show_bursts, gefs=None):
+        blabel = {zk: props.get(zk, {}).get("name", zk) for zk in BORDER}
+        f = go.Figure()
+        piv = hist.pivot_table(index="zone_key", columns="date",
+                               values="ante_pct").reindex(BORDER)
+        f.add_heatmap(
+            x=piv.columns, y=[blabel[z] for z in piv.index], z=piv.values,
+            colorscale=[[0, "#d9c8a0"], [0.5, "#f5f2ea"],
+                        [0.8, "#a8c8e8"], [1, "#2f6db3"]],
+            zmin=0, zmax=100,
+            colorbar=dict(title="catchment<br>wetness<br>pctile",
+                          thickness=12))
+        if show_bursts:
+            bursts = hist[(hist.pct_normal >= 150) & (hist.rain_mm >= 15)]
+            if not bursts.empty:
+                f.add_scatter(
+                    x=bursts.date,
+                    y=[blabel.get(z, z) for z in bursts.zone_key],
+                    mode="markers",
+                    marker=dict(size=list(bursts.pct_normal.clip(150, 500)
+                                          / 45),
+                                color="black", symbol="circle-open",
+                                line=dict(width=1.8)),
+                    name="rainfall burst ≥150% of normal")
+        al = hist[hist.tier == 2]
+        if not al.empty:
+            f.add_scatter(x=al.date,
+                          y=[blabel.get(z, z) for z in al.zone_key],
+                          mode="markers",
+                          marker=dict(size=10, color="crimson",
+                                      symbol="x-thin",
+                                      line=dict(width=2.4, color="crimson")),
+                          name="basin alert (context tier)")
+        reg = regional_diamonds(hist)
+        for sig, color in (("saturation", "#1a2f6b"), ("whiplash", "#e07b00")):
+            sub = reg[reg.sig == sig]
+            if not sub.empty:
+                f.add_scatter(x=sub.date,
+                              y=["REGIONAL ALERT"] * len(sub),
+                              mode="markers",
+                              marker=dict(size=11, color=color,
+                                          symbol="diamond"),
+                              name=f"REGIONAL alert — {sig}")
+        w0 = hist.date.min()
+        for x0, x1, lbl in FLOOD_EVENTS:
+            if pd.Timestamp(x1) >= w0:
+                for edge in (max(pd.Timestamp(x0), w0).isoformat(), x1):
+                    f.add_vline(x=edge, line_width=1.5, line_color="crimson",
+                                line_dash="dot", layer="above")
+                f.add_annotation(x=max(pd.Timestamp(x0), w0).isoformat(),
+                                 y=1.05, yref="paper", text=lbl,
+                                 showarrow=False, xanchor="left",
+                                 font=dict(size=11, color="crimson"))
+        if gefs is not None and not gefs.empty:
+            x0 = hist.date.max() + pd.Timedelta(days=5)
+            f.add_vrect(x0=x0, x1=x0 + pd.Timedelta(days=10),
+                        fillcolor="gray", opacity=0.10, line_width=0)
+            wet_fc = gefs[gefs.pct_clim >= 150].index.tolist()
+            f.add_annotation(
+                x=(x0 + pd.Timedelta(days=5)).isoformat(), y=1.05,
+                yref="paper", showarrow=False,
+                font=dict(size=11, color="gray"),
+                text=("GEFS 10-day: " + (", ".join(
+                    blabel.get(z, z) for z in wet_fc) + " wet"
+                    if wet_fc else "no heavy rain signalled")))
+        f.update_layout(title=title, height=420,
+                        margin=dict(t=40, b=10),
+                        legend=dict(orientation="h", y=-0.15))
+        return f
+
+    st.plotly_chart(
+        mechanism_chart(fs[fs.date >= fs.date.max() - pd.Timedelta(days=365)],
+                        "Mechanism view, last 12 months — alerts fire where "
+                        "a burst (circle) lands on a saturated catchment; "
+                        "orange diamonds = dry-whiplash firings",
+                        show_bursts=True, gefs=g10),
+        use_container_width=True)
+    with st.expander("Full history 1998–2026 — every documented flood vs "
+                     "the signal record"):
+        st.plotly_chart(
+            mechanism_chart(fs[fs.date >= "1998-01-01"],
+                            "Mechanism view, 1998–2026 (bursts omitted at "
+                            "this scale)", show_bursts=False),
+            use_container_width=True)
     st.caption(
         "Tiers: WATCH = catchment ≥90th pctile wet + 2 consecutive pentads "
         "≥150% of normal · ALERT adds a ≥200% pentad, or ≥250% onto a "
