@@ -495,17 +495,15 @@ if view == "Flood watch":
 
     st.plotly_chart(
         mechanism_chart(fs[fs.date >= fs.date.max() - pd.Timedelta(days=365)],
-                        "Mechanism view, last 12 months — alerts fire where "
-                        "a burst (circle) lands on a saturated catchment; "
-                        "orange diamonds = dry-whiplash firings",
+                        "Flood risk timeline — last 12 months",
                         show_bursts=True, gefs=g10),
         use_container_width=True)
     with st.expander("Full history 1998–2026 — every documented flood vs "
                      "the signal record"):
         st.plotly_chart(
             mechanism_chart(fs[fs.date >= "1998-01-01"],
-                            "Mechanism view, 1998–2026 (bursts omitted at "
-                            "this scale)", show_bursts=False),
+                            "Flood risk timeline, 1998–2026",
+                            show_bursts=False),
             use_container_width=True)
     st.caption(
         "How to read this: a basin alert (red ×) fires when very heavy "
