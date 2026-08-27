@@ -455,8 +455,13 @@ if view == "Flood watch":
                           marker=dict(size=10, color="crimson",
                                       symbol="x-thin",
                                       line=dict(width=2.4, color="crimson")),
-                          name="basin alert (context tier)")
+                          name="basin flood alert")
         reg = regional_diamonds(hist)
+        REG_NAME = {
+            "saturation": "Regional flood warning triggered "
+                          "(ground saturation)",
+            "whiplash": "Regional flood alert (whiplash effect)",
+        }
         for sig, color in (("saturation", "#1a2f6b"), ("whiplash", "#e07b00")):
             sub = reg[reg.sig == sig]
             if not sub.empty:
@@ -465,7 +470,7 @@ if view == "Flood watch":
                               mode="markers",
                               marker=dict(size=11, color=color,
                                           symbol="diamond"),
-                              name=f"REGIONAL alert — {sig}")
+                              name=REG_NAME[sig])
         w0 = hist.date.min()
         for x0, x1, lbl in FLOOD_EVENTS:
             if pd.Timestamp(x1) >= w0:
