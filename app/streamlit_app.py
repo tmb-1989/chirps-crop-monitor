@@ -92,7 +92,145 @@ tracking as bad as the worst of those events.
 """)
 
 today = dt.date.today()
-view = st.sidebar.radio("View", ["Overview", "Zone detail", "Flood watch"])
+view = st.sidebar.radio("View", ["Country risk", "Overview", "Hydrology",
+                                 "Flood watch"])
+
+# ======================== COUNTRY RISK ====================================
+NAMES_CR = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
+            "RWA": "Rwanda", "UGA": "Uganda", "ZMB": "Zambia",
+            "MWI": "Malawi", "ZWE": "Zimbabwe", "MOZ": "Mozambique",
+            "MDG": "Madagascar", "ZAF": "South Africa"}
+DOT = {"green": "🟢", "yellow": "🟡", "red": "🔴", "gray": "⚪"}
+FILL = {"green": "#e6f4e6", "yellow": "#fdf3d7", "red": "#fbe3e3",
+        "gray": "#f0f0f0"}
+
+
+def drought_region_block(expander: bool = True) -> None:
+    """Per-zone drought lights table (zone_risk), worst-first per country.
+    Rendered inside an expander (Country risk view) or inline (Overview)."""
+    zrisk = load("SELECT * FROM zone_risk WHERE factor='drought'")
+    if zrisk.empty:
+        return
+    rank = {"red": 3, "yellow": 2, "green": 1, "gray": 0}
+    zrisk["_r"] = zrisk.status.map(rank)
+    zrisk["_c"] = zrisk.country.map(
+        {c: i for i, c in enumerate(NAMES_CR)}).fillna(99)
+    zrisk = zrisk.sort_values(["_c", "_r", "wrsi"],
+                              ascending=[True, False, True])
+    n_hot = int((zrisk._r >= 2).sum())
+    label = (f"Drought by growing region ({n_hot} of {len(zrisk)} zones "
+             "at yellow/red)")
+    ctx = st.expander(label, expanded=n_hot > 0) if expander \
+        else st.container()
+    with ctx:
+        if not expander:
+            st.markdown(f"**{label}**")
+        drows, dfills = [], []
+        for _, z in zrisk.iterrows():
+            wr_txt, wr_fill = "—", ""
+            if pd.notna(z.wrsi):
+                if z.wrsi_in_season:
+                    wr_txt = f"{z.wrsi:.0f}"
+                    wr_fill = FILL["red"] if z.wrsi < 80 else \
+                        FILL["yellow"] if z.wrsi < 95 else FILL["green"]
+                else:
+                    wr_txt = f"{z.wrsi:.0f} · off-season"
+            sp_txt, sp_fill = "—", ""
+            if pd.notna(z.spi3):
+                sp_txt = f"{z.spi3:.1f}"
+                sp_fill = FILL["red"] if z.spi3 <= -1.5 else \
+                    FILL["yellow"] if z.spi3 <= -1 else FILL["green"]
+            sm_txt, sm_fill = "—", ""
+            if pd.notna(z.sm):
+                sm_txt = f"{z.sm:.0f}%"
+                sm_fill = FILL["red"] if z.sm < 82 else \
+                    FILL["yellow"] if z.sm < 85 else FILL["green"]
+            drows.append({
+                "Country": NAMES_CR.get(z.country, z.country),
+                "Region": f"{DOT[z.status]} {z['name']}",
+                "WRSI %med": wr_txt, "SPI-3": sp_txt,
+                "Soil moisture": sm_txt, "Driver": z.reason})
+            dfills.append({
+                "Country": "", "Region": FILL[z.status],
+                "WRSI %med": wr_fill, "SPI-3": sp_fill,
+                "Soil moisture": sm_fill, "Driver": ""})
+        dtbl, dfill = pd.DataFrame(drows), pd.DataFrame(dfills)
+        dstyled = dtbl.style.apply(
+            lambda col: [f"background-color: {dfill.loc[i, col.name]}"
+                         if dfill.loc[i, col.name] else ""
+                         for i in col.index], axis=0)
+        st.dataframe(dstyled, hide_index=True, use_container_width=True,
+                     height=min(70 + 35 * len(dtbl), 600))
+        st.caption(
+            "Each region carries its own light; the country-level drought "
+            "cell is the worst of these. WRSI is dimmed off-season (it "
+            "reads ~100 and shouldn't drive a light). Readings are colored "
+            "by their own thresholds — WRSI <80 / <95, SPI-3 ≤−1.5 / ≤−1, "
+            "soil moisture <82% / <85% — so you can see which indicator "
+            "trips a light, not just that one did.")
+
+
+if view == "Country risk":
+    st.subheader("Country risk board — ENSO / drought / flood")
+    cr = load("SELECT * FROM country_risk")
+    if cr.empty:
+        st.warning("No country_risk data — run compute/country_risk.py.")
+        st.stop()
+
+    FACTORS = [("enso", "El Niño / ENSO"), ("drought", "Drought"),
+               ("flood", "Flood")]
+
+    cell = {(r.country, r.factor): r for _, r in cr.iterrows()}
+    rows, fills = [], []
+    for c in NAMES_CR:
+        row, frow = {"Country": NAMES_CR[c]}, {"Country": ""}
+        for fac, label in FACTORS:
+            r = cell.get((c, fac))
+            if r is None:
+                row[label], frow[label] = "⚪ —", FILL["gray"]
+            else:
+                row[label] = f"{DOT[r.status]} {r.reason or ''}"
+                frow[label] = FILL[r.status]
+        rows.append(row)
+        fills.append(frow)
+    tbl = pd.DataFrame(rows)
+    fill_df = pd.DataFrame(fills)
+    styled = tbl.style.apply(
+        lambda col: [f"background-color: {fill_df.loc[i, col.name]}"
+                     for i in col.index], axis=0)
+    st.dataframe(styled, hide_index=True, use_container_width=True,
+                 height=430)
+
+    ts = cr.computed_at.max()
+    age_h = (pd.Timestamp.now(tz="UTC") - pd.Timestamp(ts)).total_seconds() \
+        / 3600
+    msg = f"Board computed {ts} UTC ({age_h:.0f}h ago)."
+    if age_h > 24 * 7:
+        st.warning(msg + " — STALE: the update pipeline may not be running.")
+    else:
+        st.caption(msg)
+    st.caption(
+        "Worst case aggregation: the most stressed zone or basin colors "
+        "its whole country, and each cell names the culprit. ⚪ = inputs "
+        "missing or stale — never read gray as safe. ENSO cells pass the "
+        "global ONI phase through each country's impact season "
+        "(El Niño ≈ OND floods in East Africa but main-season drought in "
+        "southern Africa); 'developing' is detection, not a forecast. "
+        "Drought = in-season WRSI, SPI-3 and soil moisture over crop "
+        "zones; flood = the backtested basin flood-watch layer.")
+
+    # ---- drought drill-down: one light per growing region ----------------
+    drought_region_block(expander=True)
+
+    log = load("SELECT changed_at, country, factor, prev, status, reason "
+               "FROM country_risk_log ORDER BY changed_at DESC LIMIT 20")
+    with st.expander(f"Recent status changes ({len(log)})"):
+        if log.empty:
+            st.caption("No changes recorded yet — the log starts with the "
+                       "board's second computation.")
+        else:
+            st.dataframe(log, hide_index=True, use_container_width=True)
+    st.stop()
 
 # ======================== OVERVIEW ========================================
 # one representative zone per country, its main season
@@ -135,6 +273,7 @@ def season_cum_frame(zk: str, a: int, b: int):
 
 
 if view == "Overview":
+    drought_region_block(expander=False)
     st.subheader("Main-season cumulative rainfall by country")
     cols = st.columns(3)
     for i, zk in enumerate(REP_ZONES):
@@ -328,10 +467,29 @@ if view == "Overview":
 # ======================== FLOOD WATCH =====================================
 if view == "Flood watch":
     import json as _json
-    st.subheader("Flood watch — Kenya pilot basins")
-    fs = load("SELECT * FROM flood_state ORDER BY granule_start")
+    import sys as _sys
+    _sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent
+                            / "compute"))
+    from flood_signals import COUNTRY, EVENTS, FLOOD_MONTHS  # noqa: E402
+
+    gj = _json.loads(open(pathlib.Path(__file__).resolve().parent.parent /
+                          "data" / "zones" / "basins.geojson").read())
+    props = {f["properties"]["zone_key"]: f["properties"]
+             for f in gj["features"]}
+    iso3 = st.sidebar.selectbox(
+        "Country", sorted({p["iso3"] for p in props.values()},
+                          key=list(COUNTRY).index),
+        format_func=COUNTRY.get)
+    czones = [zk for zk, p in sorted(props.items()) if p["iso3"] == iso3]
+
+    st.subheader(f"Flood watch — {COUNTRY[iso3]} basins")
+    fs = load("SELECT * FROM flood_state WHERE zone_key IN (%s) "
+              "ORDER BY granule_start" % ",".join("?" * len(czones)),
+              tuple(czones))
     if fs.empty:
-        st.warning("No flood_state data — run compute/flood_signals.py.")
+        st.warning(f"No flood_state data for {COUNTRY[iso3]} — the pentad "
+                   "backfill may still be running; then run "
+                   "compute/flood_signals.py.")
         st.stop()
     fs["date"] = pd.to_datetime(fs.granule_start)
     latest_p = fs.granule_start.max()
@@ -341,11 +499,10 @@ if view == "Flood watch":
     lat_month = pd.Timestamp(latest_p).month
     n1 = int((cur.tier >= 1).sum())
     n2 = int((cur.tier >= 2).sum())
-    regional = (n1 >= 2 and n2 >= 1 and
-                lat_month in {2, 3, 4, 5, 10, 11, 12})
+    regional = (n1 >= 2 and n2 >= 1 and lat_month in FLOOD_MONTHS[iso3])
     if regional:
-        st.error(f"REGIONAL FLOOD ALERT — {n2} basin(s) alerting, "
-                 f"{n1} armed (as of {latest_p})")
+        st.error(f"{COUNTRY[iso3].upper()} REGIONAL FLOOD ALERT — "
+                 f"{n2} basin(s) alerting, {n1} armed (as of {latest_p})")
     else:
         st.success(f"Regional state: clear (as of pentad starting {latest_p} "
                    f"— {n1} basin(s) armed, {n2} alerting)")
@@ -363,8 +520,14 @@ if view == "Flood watch":
                              "evidence of anything.")
         else:
             st.caption(msg)
-    hist_al = load("SELECT granule_start, state, detail, recorded_at "
-                   "FROM flood_alerts ORDER BY granule_start DESC LIMIT 12")
+    has_country = not load(
+        "SELECT name FROM pragma_table_info('flood_alerts') "
+        "WHERE name='country'").empty
+    hist_al = load(
+        "SELECT granule_start, state, detail, recorded_at FROM flood_alerts "
+        + ("WHERE country=? " if has_country else "")
+        + "ORDER BY granule_start DESC LIMIT 12",
+        (iso3,) if has_country else ())
     with st.expander(f"Alert history ({len(hist_al)} recorded)"):
         if hist_al.empty:
             st.caption("No regional alerts recorded since the layer went "
@@ -374,10 +537,6 @@ if view == "Flood watch":
             st.dataframe(hist_al, hide_index=True, use_container_width=True)
 
     # basin table with GEFS outlook + downstream pairing
-    gj = _json.loads(open(pathlib.Path(__file__).resolve().parent.parent /
-                          "data" / "zones" / "basins.geojson").read())
-    props = {f["properties"]["zone_key"]: f["properties"]
-             for f in gj["features"]}
     gefs = load("SELECT zone_key, horizon, fcst_mm, pct_clim FROM flood_gefs "
                 "WHERE issue_date = (SELECT max(issue_date) FROM flood_gefs)")
     g10 = gefs[gefs.horizon == "10_day"].set_index("zone_key")
@@ -398,18 +557,20 @@ if view == "Flood watch":
     st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
 
     # ---- mechanism charts ------------------------------------------------
-    FLOOD_EVENTS = [
-        ("2001-11-01", "2001-12-15", "'01"), ("2002-04-15", "2002-05-31", "'02"),
-        ("2006-10-15", "2006-12-15", "'06"), ("2007-09-01", "2007-10-31", "'07"),
-        ("2008-10-15", "2008-11-30", "'08"), ("2010-03-01", "2010-05-15", "'10"),
-        ("2012-04-01", "2012-05-31", "'12"), ("2013-03-15", "2013-05-15", "'13"),
-        ("2015-10-15", "2015-12-31", "'15"), ("2018-03-01", "2018-05-31", "'18"),
-        ("2019-10-01", "2019-12-31", "'19"), ("2020-03-15", "2020-05-31", "'20"),
-        ("2023-10-15", "2023-12-15", "'23"), ("2024-03-15", "2024-05-15", "'24"),
-        ("2026-03-05", "2026-05-31", "MAM 2026 floods"),
-    ]
-    BORDER = ["bas_nzoia_hw", "bas_nzoia_low", "bas_lakeshore",
-              "bas_nairobi", "bas_tana_hw", "bas_tana_mid", "bas_ewaso"]
+    # documented flood events for the selected country (chart markers)
+    FLOOD_EVENTS = [(a, b, f"'{a[2:4]}") for a, b, _sev in EVENTS[iso3]]
+    ORDER = {
+        "KEN": ["bas_nzoia_hw", "bas_nzoia_low", "bas_lakeshore",
+                "bas_nairobi", "bas_tana_hw", "bas_tana_mid", "bas_ewaso"],
+        "ETH": ["bas_laketana", "bas_baro", "bas_awash_hw", "bas_awash_mid",
+                "bas_shabelle_hw"],
+        "TZA": ["bas_mwanza", "bas_pangani_hw", "bas_dar", "bas_kilombero",
+                "bas_rufiji_low"],
+        "RWA": ["bas_sebeya", "bas_nyabarongo", "bas_akanyaru"],
+        "UGA": ["bas_nyamwamba", "bas_kampala", "bas_kyoga", "bas_elgon"],
+    }
+    BORDER = [zk for zk in ORDER.get(iso3, czones) if zk in czones] + \
+        [zk for zk in czones if zk not in ORDER.get(iso3, [])]
 
     def regional_diamonds(df):
         """Regional-alert pentads with dominant signature."""
@@ -417,7 +578,7 @@ if view == "Flood watch":
         for d, grp in df.groupby("date"):
             n1 = int((grp.tier >= 1).sum())
             n2 = int((grp.tier >= 2).sum())
-            if n1 >= 2 and n2 >= 1 and d.month in {2, 3, 4, 5, 10, 11, 12}:
+            if n1 >= 2 and n2 >= 1 and d.month in FLOOD_MONTHS[iso3]:
                 sigs = set(grp[grp.tier >= 2].signature.dropna())
                 rows.append((d, "whiplash" if sigs == {"whiplash"}
                              else "saturation"))
@@ -516,10 +677,13 @@ if view == "Flood watch":
         "orange 'whiplash' case, on ground baked dry by drought. A REGIONAL "
         "ALERT (diamond) needs at least two basins in that state at once "
         "during a rainy season, which filters out most one-off local "
-        "storms. In testing against 1999–2026, the regional alert flagged "
-        "every major Kenya flood since 2006, usually days to weeks ahead; "
+        "storms. In testing against 1999–2026, the Kenya regional alert "
+        "flagged every major flood since 2006, usually days to weeks ahead; "
         "roughly half its firings were followed by a major flood, with a "
-        "false alarm about every one to two years. Individual basin alerts "
+        "false alarm about every one to two years. Ethiopia, Tanzania, "
+        "Rwanda and Uganda use the same rule — see each country's backtest "
+        "in compute/flood_signals.py output for its own hit/false-alarm "
+        "record before leaning on it. Individual basin alerts "
         "fire much more often and are best read alongside the rest of the "
         "chart. The gray band shows the rainfall forecast for the next "
         "10 days.")

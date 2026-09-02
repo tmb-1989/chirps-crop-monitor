@@ -29,6 +29,48 @@ anom/z-score, LWRSI dekadal (data + % of median), FLDAS soil moisture
 ./venv/bin/streamlit run app/streamlit_app.py
 ```
 
+## Country risk board
+
+Traffic-light matrix (green/yellow/red/gray) per country × risk factor —
+**ENSO, drought, flood** so far (hydropower planned) — the dashboard's
+landing view. `ingest/enso.py` pulls NOAA CPC's ONI; a per-country
+exposure table converts the global phase into country lights (El Niño ≈
+OND flood risk in East Africa, main-season drought in southern Africa).
+Drought aggregates in-season WRSI / SPI-3 / soil moisture over crop
+zones; flood reads the flood-watch layer. Worst-case aggregation — the
+most stressed zone/basin colors the country and is named in the cell.
+Gray = inputs missing or stale, never "safe". Snapshot in `country_risk`,
+transitions in `country_risk_log`, per-zone drought lights (the board's
+drill-down expander) in `zone_risk` (`compute/country_risk.py`).
+
+## Flood-watch layer
+
+Basin-level flood signals over 24 HydroBASINS level-7 basins in **Kenya
+(pilot), Ethiopia, Tanzania, Rwanda, Uganda** — scoping in
+[SCOPING-FLOODS.md](SCOPING-FLOODS.md). Pentad CHIRPS v3 zonal means per
+basin (`ingest/flood_raster.py`), saturation/whiplash tiers + per-country
+regional alerts and backtests (`compute/flood_signals.py`), "Flood watch"
+dashboard view with a country selector.
+
+```bash
+# one-off: basin polygons (needs data/raw/hybas_af_lev07_v1c.shp from
+# https://data.hydrosheds.org/file/HydroBASINS/standard/hybas_af_lev07_v1c.zip)
+./venv/bin/python ingest/flood_zones.py
+
+# pentad backfill over basins (--full: 1981-present, ~4-5h at CHC's rate limit;
+# delete data/zones/basins_masks.npz first if basins changed)
+./venv/bin/python ingest/flood_raster.py --full
+
+# signals + per-country regional alerts + backtests
+./venv/bin/python compute/flood_signals.py
+```
+
+Calibration status: Kenya's regional-alert rule is backtested at 71%
+precision / all major events caught (1999–2026). The extension countries
+reuse the same thresholds and rule; their event catalogs are approximate
+EM-DAT/FloodList-informed windows and each country's backtest prints its
+own hit/false-alarm record — check it before leaning on those alerts.
+
 ## Phase 2: local CHIRPS v3 raster pipeline
 
 Independent of the .gov endpoint: streams dekad GeoTIFFs from

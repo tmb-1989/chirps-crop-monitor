@@ -104,7 +104,12 @@ the routing-lag label. Absolute floors and percentile arms are per-basin
 | F1 | HydroBASINS ingest, Kenya basins, GEFS per basin, backfill | 2–3 days |
 | F2 | Event catalog + calibration/backtest report | 2–3 days |
 | F3 | Dashboard view + cron alert wiring | 2 days |
-| F4 | Extend Malawi/Mozambique/Tanzania | 1–2 days each |
+| F4 | Extend to more countries | 1–2 days each |
+
+F4 status (Sep 2026): extended to **Ethiopia, Tanzania, Rwanda, Uganda**
+(17 new basins, per-country event catalogs / flood-season months / regional
+alerts / backtests). Malawi and Mozambique remain candidates — note the
+cyclone caveat in §8 for Mozambique.
 
 ## 8. Known limits & gotchas
 

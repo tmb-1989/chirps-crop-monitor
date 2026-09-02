@@ -1,4 +1,9 @@
-"""Flood-watch signals over Kenya pilot basins (SCOPING-FLOODS.md F2).
+"""Flood-watch signals over East Africa basins (SCOPING-FLOODS.md F2/F4).
+
+Countries: Kenya (pilot), Ethiopia, Tanzania, Rwanda, Uganda. Signals are
+computed per basin; the regional alert, event catalog, backtest, and
+flood-season month filter are per country (basins carry iso3 in
+data/zones/basins.geojson).
 
 Per basin, per pentad, from chirps3local_pentad_data(+prelim):
   pct_normal   pentad rain as % of the 1991-2020 same-pentad-of-year mean
@@ -14,9 +19,9 @@ GEFS (CHIRPS-GEFS v3 05/10/15-day accumulations, fetched live) upgrades a
 current watch to alert when the 10-day forecast >= 180% of the same-window
 climatology; stored in flood_gefs.
 
-Backtest: evaluates historical alert episodes against the embedded Kenya
-event catalog (1999-2026, EM-DAT/FloodList/ReliefWeb-informed month
-windows). Run: python compute/flood_signals.py [--backtest-only]
+Backtest: evaluates historical alert episodes against the embedded
+per-country event catalogs (1999-2026, EM-DAT/FloodList/ReliefWeb-informed
+month windows). Run: python compute/flood_signals.py [--backtest-only]
 """
 from __future__ import annotations
 
@@ -56,26 +61,92 @@ CREATE TABLE IF NOT EXISTS flood_gefs (
 );
 """
 
-# Kenya major flood events, calibration catalog (approximate windows).
-# Sources: EM-DAT, FloodList, ReliefWeb archives. "major" = national-scale
-# disaster (deaths >~20 or mass displacement).
-EVENTS = [
-    ("2001-11-01", "2001-12-15", "moderate"),
-    ("2002-04-15", "2002-05-31", "moderate"),
-    ("2006-10-15", "2006-12-15", "major"),
-    ("2007-09-01", "2007-10-31", "moderate"),   # Nzoia/Budalangi
-    ("2008-10-15", "2008-11-30", "moderate"),
-    ("2010-03-01", "2010-05-15", "moderate"),
-    ("2012-04-01", "2012-05-31", "major"),
-    ("2013-03-15", "2013-05-15", "major"),
-    ("2015-10-15", "2015-12-31", "major"),
-    ("2018-03-01", "2018-05-31", "major"),
-    ("2019-10-01", "2019-12-31", "major"),
-    ("2020-03-15", "2020-05-31", "major"),
-    ("2023-10-15", "2023-12-15", "major"),
-    ("2024-03-15", "2024-05-15", "major"),
-    ("2026-03-05", "2026-05-31", "major"),
-]
+# Major flood events per country, calibration catalogs (approximate month
+# windows). Sources: EM-DAT, FloodList, ReliefWeb archives. "major" =
+# national-scale disaster (deaths >~20 or mass displacement). These are
+# calibration windows, not precise event dates.
+EVENTS = {
+    "KEN": [
+        ("2001-11-01", "2001-12-15", "moderate"),
+        ("2002-04-15", "2002-05-31", "moderate"),
+        ("2006-10-15", "2006-12-15", "major"),
+        ("2007-09-01", "2007-10-31", "moderate"),   # Nzoia/Budalangi
+        ("2008-10-15", "2008-11-30", "moderate"),
+        ("2010-03-01", "2010-05-15", "moderate"),
+        ("2012-04-01", "2012-05-31", "major"),
+        ("2013-03-15", "2013-05-15", "major"),
+        ("2015-10-15", "2015-12-31", "major"),
+        ("2018-03-01", "2018-05-31", "major"),
+        ("2019-10-01", "2019-12-31", "major"),
+        ("2020-03-15", "2020-05-31", "major"),
+        ("2023-10-15", "2023-12-15", "major"),
+        ("2024-03-15", "2024-05-15", "major"),
+        ("2026-03-05", "2026-05-31", "major"),
+    ],
+    "ETH": [
+        ("2003-08-01", "2003-09-15", "moderate"),
+        ("2005-04-15", "2005-05-31", "moderate"),   # Somali region spring
+        ("2006-08-01", "2006-09-15", "major"),      # Dire Dawa / Omo
+        ("2007-08-01", "2007-09-30", "moderate"),
+        ("2010-07-15", "2010-09-15", "moderate"),
+        ("2016-04-01", "2016-05-31", "moderate"),   # post-El Niño whiplash
+        ("2018-04-01", "2018-05-31", "major"),      # Somali region gu
+        ("2019-10-01", "2019-11-30", "major"),
+        ("2020-07-01", "2020-09-30", "major"),      # Awash/Afar kiremt
+        ("2023-10-15", "2023-12-15", "major"),      # deyr after drought
+        ("2024-04-15", "2024-05-31", "major"),
+    ],
+    "TZA": [
+        ("2009-12-20", "2010-01-31", "moderate"),   # Kilosa/Morogoro
+        ("2011-12-15", "2011-12-31", "major"),      # Dar es Salaam
+        ("2014-04-01", "2014-05-15", "moderate"),
+        ("2018-04-01", "2018-04-30", "moderate"),   # Dar
+        ("2019-10-15", "2020-01-31", "major"),      # OND + Lindi/Mtwara
+        ("2020-04-01", "2020-05-15", "moderate"),
+        ("2023-11-01", "2023-12-15", "major"),      # Hanang/Manyara
+        ("2024-04-01", "2024-05-15", "major"),      # El Niño MAM
+    ],
+    "RWA": [
+        ("2016-05-01", "2016-05-31", "moderate"),   # Gakenke
+        ("2018-04-01", "2018-05-31", "major"),
+        ("2019-12-01", "2019-12-31", "moderate"),   # Kigali
+        ("2020-04-01", "2020-05-31", "major"),
+        ("2023-05-01", "2023-05-15", "major"),      # NW landslides/floods
+        ("2024-05-01", "2024-05-31", "moderate"),
+    ],
+    "UGA": [
+        ("2007-08-15", "2007-10-15", "major"),      # Teso
+        ("2010-03-01", "2010-03-31", "major"),      # Bududa
+        ("2013-05-01", "2013-05-31", "moderate"),   # Kasese
+        ("2018-10-01", "2018-10-31", "moderate"),   # Bududa
+        ("2019-10-15", "2019-12-31", "major"),
+        ("2020-05-01", "2020-05-31", "major"),      # Kasese/lake levels
+        ("2022-07-15", "2022-08-31", "moderate"),   # Mbale
+    ],
+}
+
+# flood-season month filter for the regional alert, per country
+FLOOD_MONTHS = {
+    "KEN": {2, 3, 4, 5, 10, 11, 12},        # MAM long + OND short rains
+    "ETH": {4, 5, 6, 7, 8, 9, 10, 11},      # belg + kiremt + deyr spillover
+    "TZA": {1, 2, 3, 4, 5, 11, 12},         # Nov-May (uni/bimodal mix)
+    "RWA": {3, 4, 5, 9, 10, 11, 12},        # two rainy seasons
+    "UGA": {3, 4, 5, 7, 8, 9, 10, 11, 12},  # bimodal + Elgon/Rwenzori JJA
+}
+
+COUNTRY = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
+           "RWA": "Rwanda", "UGA": "Uganda"}
+
+BASINS_GJ = pathlib.Path(__file__).resolve().parent.parent / \
+    "data" / "zones" / "basins.geojson"
+
+
+def basin_countries() -> dict:
+    """zone_key -> iso3 from basins.geojson."""
+    import json
+    gj = json.loads(BASINS_GJ.read_text())
+    return {f["properties"]["zone_key"]: f["properties"].get("iso3", "KEN")
+            for f in gj["features"]}
 
 
 def pentad_of_year(d: dt.date) -> int:
@@ -183,8 +254,6 @@ def fetch_gefs(con, basins: list) -> None:
     con.commit()
 
 
-FLOOD_MONTHS = {2, 3, 4, 5, 10, 11, 12}  # MAM long rains + OND short rains
-
 NTFY_TOPIC_FILE = pathlib.Path(__file__).resolve().parent.parent / \
     "data" / "ntfy_topic.txt"
 
@@ -208,45 +277,49 @@ def _notify(message: str) -> None:
         print(f"ntfy push failed (non-fatal): {e}", file=sys.stderr)
 
 
-def regional_series(all_states: pd.DataFrame) -> pd.Series:
-    """Regional-alert pentads: >=2 basins armed (tier>=1), >=1 alerting
-    (tier 2), inside the flood-season months. Calibrated 1999-2026:
-    100% recall on major events, ~71% precision, ~1 false alarm / 5yrs."""
-    g = all_states.groupby("granule_start").agg(
+def regional_series(states: pd.DataFrame, iso3: str) -> pd.Series:
+    """Regional-alert pentads for one country's basins: >=2 basins armed
+    (tier>=1), >=1 alerting (tier 2), inside that country's flood-season
+    months. Kenya calibration 1999-2026: 100% recall on major events,
+    ~71% precision, ~1 false alarm / 5yrs. Same rule is applied to the
+    extension countries (see per-country backtest output)."""
+    g = states.groupby("granule_start").agg(
         n1=("tier", lambda t: (t >= 1).sum()),
         n2=("tier", lambda t: (t >= 2).sum()))
     idx = pd.to_datetime(g.index)
     mask = (g.n1.values >= 2) & (g.n2.values >= 1) & \
-        pd.Index(idx.month).isin(list(FLOOD_MONTHS))
+        pd.Index(idx.month).isin(list(FLOOD_MONTHS[iso3]))
     return pd.Series(idx[mask])
 
 
-def backtest(all_states: pd.DataFrame) -> None:
-    alerts = all_states[all_states.tier == 2].copy()
-    alerts["date"] = pd.to_datetime(alerts.granule_start)
-    alerts = alerts[alerts.date >= "1999-01-01"].sort_values("date")
-    # collapse to episodes (gap > 30 days)
+def backtest(states: pd.DataFrame, iso3: str) -> None:
+    """Alert episodes for one country vs its event catalog."""
+    # regional-alert pentads, collapsed to episodes (gap > 30 days)
+    reg = regional_series(states, iso3)
+    reg = reg[reg >= pd.Timestamp("1999-01-01")]
     episodes = []
-    for d, s in zip(alerts.date, alerts.signature):
+    for d in reg:
         if episodes and (d - episodes[-1][1]).days <= 30:
             episodes[-1][1] = d
         else:
-            episodes.append([d, d, s])
-    ev = [(pd.Timestamp(a), pd.Timestamp(b), sev) for a, b, sev in EVENTS]
+            episodes.append([d, d])
+    ev = [(pd.Timestamp(a), pd.Timestamp(b), sev)
+          for a, b, sev in EVENTS.get(iso3, [])]
     hits, falses = [], []
-    for e0, e1, sig in episodes:
+    for e0, e1 in episodes:
         ok = any(a - pd.Timedelta(days=10) <= e0 <= b or a <= e1 <= b
                  for a, b, _ in ev)
-        (hits if ok else falses).append((e0.date(), e1.date(), sig))
+        (hits if ok else falses).append((e0.date(), e1.date()))
     caught = [f"{a.date()}" for a, b, sev in ev
               if any(a - pd.Timedelta(days=10) <= e0 <= b or a <= e1 <= b
-                     for e0, e1, _ in episodes)]
-    print(f"\n=== backtest 1999-2026: {len(episodes)} alert episodes")
+                     for e0, e1 in episodes)]
+    print(f"\n=== {COUNTRY[iso3]} backtest 1999-2026: "
+          f"{len(episodes)} regional-alert episodes")
     print(f"hits: {len(hits)}  false alarms: {len(falses)}  "
           f"precision {100*len(hits)/max(len(episodes),1):.0f}%")
     print(f"events caught: {len(caught)}/{len(ev)} "
           f"({', '.join(caught)})")
-    print("false alarms:", ", ".join(f"{a}({s})" for a, b, s in falses) or "none")
+    print("false alarms:", ", ".join(f"{a}" for a, b in falses) or "none")
     missed = [str(a.date()) for a, b, sev in ev if str(a.date())[:7] not in
               {c[:7] for c in caught}]
     print("events missed:", ", ".join(missed) or "none")
@@ -259,6 +332,7 @@ def main() -> int:
     args = ap.parse_args()
     con = db.connect()
     con.executescript(SCHEMA)
+    countries = basin_countries()
     basins = [r[0] for r in con.execute(
         "SELECT DISTINCT zone_key FROM observations WHERE "
         "dataset='chirps3local_pentad_data' AND zone_key LIKE 'bas_%'")]
@@ -266,8 +340,9 @@ def main() -> int:
     for zk in sorted(basins):
         out = compute_basin(con, zk)
         cur = out.iloc[-1]
-        print(f"{zk}: {len(out)} pentads; latest {cur.granule_start} "
-              f"tier={cur.tier} ante={cur.ante_pct and round(cur.ante_pct)}")
+        ante = None if pd.isna(cur.ante_pct) else round(cur.ante_pct)
+        print(f"{countries.get(zk, '???')} {zk}: {len(out)} pentads; "
+              f"latest {cur.granule_start} tier={cur.tier} ante={ante}")
         frames.append(out)
     if not args.backtest_only and not args.no_gefs:
         try:
@@ -276,36 +351,62 @@ def main() -> int:
         except Exception as e:  # noqa: BLE001
             print(f"GEFS fetch failed (non-fatal): {e}", file=sys.stderr)
     allf = pd.concat(frames)
-    reg = regional_series(allf)
+    allf["iso3"] = allf.zone_key.map(countries)
     latest = allf.granule_start.max()
-    live = not reg.empty and (pd.Timestamp(latest) - reg.iloc[-1]).days <= 10
-    print(f"\nREGIONAL ALERT state as of {latest}: "
-          f"{'ACTIVE since ' + str(reg.iloc[-1].date()) if live else 'clear'}")
-    # persist state transitions for the cron log / downstream consumers
-    con.execute("CREATE TABLE IF NOT EXISTS flood_alerts ("
-                "granule_start TEXT PRIMARY KEY, state TEXT, "
-                "detail TEXT, recorded_at TEXT)")
-    if live:
-        cur = con.execute(
-            "INSERT OR IGNORE INTO flood_alerts VALUES (?,?,?,?)",
-            (latest, "REGIONAL_ALERT",
-             f"active since {reg.iloc[-1].date()}",
-             dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")))
-        con.commit()
-        print("!! REGIONAL FLOOD ALERT recorded — check the dashboard")
-        if cur.rowcount > 0:  # newly recorded -> push, don't repeat
-            _notify(f"REGIONAL FLOOD ALERT (Kenya basins): active since "
-                    f"{reg.iloc[-1].date()}, latest pentad {latest}. "
-                    f"See the flood-watch dashboard.")
+
+    # persist state transitions for the cron log / downstream consumers.
+    # Migrate the pre-extension Kenya-only table (PK granule_start, no
+    # country column) to a per-country PK.
+    cols = [r[1] for r in con.execute("PRAGMA table_info(flood_alerts)")]
+    if cols and "country" not in cols:
+        con.executescript(
+            "ALTER TABLE flood_alerts RENAME TO flood_alerts_old;"
+            "CREATE TABLE flood_alerts (country TEXT NOT NULL, "
+            "granule_start TEXT NOT NULL, state TEXT, detail TEXT, "
+            "recorded_at TEXT, PRIMARY KEY (country, granule_start));"
+            "INSERT INTO flood_alerts SELECT 'KEN', granule_start, state, "
+            "detail, recorded_at FROM flood_alerts_old;"
+            "DROP TABLE flood_alerts_old;")
+    else:
+        con.execute("CREATE TABLE IF NOT EXISTS flood_alerts ("
+                    "country TEXT NOT NULL, granule_start TEXT NOT NULL, "
+                    "state TEXT, detail TEXT, recorded_at TEXT, "
+                    "PRIMARY KEY (country, granule_start))")
+
+    summary = []
+    for iso3 in sorted(set(allf.iso3.dropna())):
+        cf = allf[allf.iso3 == iso3]
+        reg = regional_series(cf, iso3)
+        clatest = cf.granule_start.max()
+        live = not reg.empty and \
+            (pd.Timestamp(clatest) - reg.iloc[-1]).days <= 10
+        summary.append(f"{iso3}:{'ACTIVE' if live else 'clear'}")
+        print(f"\n{COUNTRY[iso3]} REGIONAL ALERT state as of {clatest}: "
+              f"{'ACTIVE since ' + str(reg.iloc[-1].date()) if live else 'clear'}")
+        if live:
+            cur = con.execute(
+                "INSERT OR IGNORE INTO flood_alerts VALUES (?,?,?,?,?)",
+                (iso3, clatest, "REGIONAL_ALERT",
+                 f"active since {reg.iloc[-1].date()}",
+                 dt.datetime.now(dt.timezone.utc).isoformat(
+                     timespec="seconds")))
+            con.commit()
+            print(f"!! {COUNTRY[iso3]} REGIONAL FLOOD ALERT recorded — "
+                  "check the dashboard")
+            if cur.rowcount > 0:  # newly recorded -> push, don't repeat
+                _notify(f"REGIONAL FLOOD ALERT ({COUNTRY[iso3]} basins): "
+                        f"active since {reg.iloc[-1].date()}, latest pentad "
+                        f"{clatest}. See the flood-watch dashboard.")
     # heartbeat so 'no alert' is distinguishable from 'not running'
     con.execute("CREATE TABLE IF NOT EXISTS flood_runs (id INTEGER PRIMARY "
                 "KEY CHECK (id=1), last_run TEXT, latest_pentad TEXT, "
                 "regional TEXT)")
     con.execute("INSERT OR REPLACE INTO flood_runs VALUES (1,?,?,?)",
                 (dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-                 latest, "ACTIVE" if live else "clear"))
+                 latest, " ".join(summary)))
     con.commit()
-    backtest(allf)
+    for iso3 in sorted(set(allf.iso3.dropna())):
+        backtest(allf[allf.iso3 == iso3], iso3)
     con.close()
     return 0
 
