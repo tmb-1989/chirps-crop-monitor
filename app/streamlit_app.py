@@ -16,7 +16,8 @@ import streamlit as st
 DB = pathlib.Path(__file__).resolve().parent.parent / "db" / "monitor.sqlite"
 CLIM_START, CLIM_END = 1991, 2020
 
-st.set_page_config(page_title="Crop-zone rainfall monitor", layout="wide")
+st.set_page_config(page_title="El Niño Sovereign Risk Monitor",
+                   layout="wide")
 
 
 @st.cache_data(ttl=600)
@@ -32,7 +33,7 @@ if zones.empty:
     st.error("No zones in DB — run ingest first.")
     st.stop()
 
-st.title("Crop-zone rainfall & soil moisture monitor")
+st.title("El Niño Sovereign Risk Monitor")
 st.caption(
     "CHIRPS pentad rainfall, WRSI (Water Requirement Satisfaction Index) and "
     "FLDAS soil moisture, zonal means over "
@@ -93,7 +94,7 @@ tracking as bad as the worst of those events.
 
 today = dt.date.today()
 view = st.sidebar.radio("View", ["Country risk", "Overview", "Hydrology",
-                                 "Flood watch"])
+                                 "Flood watch", "Hydropower"])
 
 # ======================== COUNTRY RISK ====================================
 NAMES_CR = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
@@ -753,6 +754,116 @@ if view == "Flood watch":
         "fire much more often and are best read alongside the rest of the "
         "chart. The gray band shows the rainfall forecast for the next "
         "10 days.")
+    st.stop()
+
+# ======================== HYDROPOWER ======================================
+if view == "Hydropower":
+    st.subheader("Hydropower — Lake Kariba (Zambia)")
+    hy = load("SELECT status, reason, as_of FROM country_risk WHERE "
+              "country='ZMB' AND factor='hydro'")
+    if not hy.empty:
+        h = hy.iloc[0]
+        icon = {"green": "🟢", "yellow": "🟡", "red": "🔴",
+                "gray": "⚪"}.get(h.status, "⚪")
+        (st.success if h.status == "green" else
+         st.warning if h.status == "yellow" else
+         st.error if h.status == "red" else st.info)(
+            f"{icon} {h.reason} (as of {h.as_of})")
+
+    kb = load("SELECT date, level_m, pct_full FROM ("
+              "SELECT date, level_m, pct_full FROM kariba_reservoir WHERE "
+              "level_m IS NOT NULL UNION SELECT date, level_m, pct_full "
+              "FROM kariba_level WHERE level_m IS NOT NULL) ORDER BY date")
+    if kb.empty:
+        st.warning("No Kariba data — run ingest/kariba.py.")
+        st.stop()
+    kb["date"] = pd.to_datetime(kb.date)
+    kb = kb.drop_duplicates("date", keep="last").set_index("date")
+
+    # ---- water level, full history --------------------------------------
+    fk = go.Figure()
+    fk.add_scatter(x=kb.index, y=kb.level_m, name="level (m)",
+                   line=dict(color="seagreen"), connectgaps=False)
+    pct = kb.pct_full.dropna()
+    if not pct.empty:
+        fk.add_scatter(x=pct.index, y=pct, name="usable storage (%)",
+                       yaxis="y2", line=dict(color="steelblue", width=1,
+                                             dash="dot"),
+                       connectgaps=False)
+    fk.add_hline(y=478, line_dash="dot", line_color="crimson",
+                 annotation_text="478m severe rationing",
+                 annotation_font=dict(size=11, color="crimson"))
+    fk.add_hline(y=475.5, line_dash="dot", line_color="darkred",
+                 annotation_text="475.5m minimum operating level",
+                 annotation_position="bottom right",
+                 annotation_font=dict(size=11, color="darkred"))
+    fk.update_layout(
+        title="Lake Kariba water level (Zambezi River Authority)",
+        height=420, margin=dict(t=40, b=0),
+        yaxis=dict(title="m", range=[474.5,
+                                     max(490.0, kb.level_m.max() + 1)]),
+        yaxis2=dict(title="% usable", overlaying="y", side="right",
+                    range=[0, 100], showgrid=False),
+        legend=dict(orientation="h", y=-0.12))
+    st.plotly_chart(fk, use_container_width=True)
+    st.caption("Daily gauge scraped from the ZRA (history seeded from the "
+               "elnino-hydro-dashboard archive, 2017–; gaps are unscraped "
+               "periods, not outages). Usable storage is % of live "
+               "storage — the 2022 and 2024 crises bottomed near 5–10%.")
+
+    # ---- drawdown monitor: trailing gap-free window ----------------------
+    rs = load("SELECT date, level_m, turbine_discharge_m3s FROM "
+              "kariba_reservoir ORDER BY date")
+    rs["date"] = pd.to_datetime(rs.date)
+    idx = rs.set_index("date").sort_index()
+    dates = idx.index.to_series()
+    gaps = dates.diff() > pd.Timedelta(days=7)
+    run_start = dates[gaps].iloc[-1] if gaps.any() else dates.iloc[0]
+    cutoff = max(run_start, idx.index.max() - pd.Timedelta(days=120))
+
+    lvl_all = kb.level_m.resample("D").mean().interpolate(limit=10)
+    rate = ((lvl_all.shift(28) - lvl_all) / 4.0).dropna()
+    rate = rate[rate.index >= cutoff]
+    td = idx.turbine_discharge_m3s.dropna()
+    td30 = td.rolling("30D").mean()
+
+    fd = go.Figure()
+    if not rate.empty:
+        fd.add_scatter(x=rate.index, y=rate, name="4-week drawdown rate",
+                       line=dict(color="crimson", width=2))
+    for y, lbl, color in ((0.15, "0.15 m/wk — 478m in play pre-refill",
+                           "orange"),
+                          (0.20, "0.20 m/wk — 478m by mid-Jan", "crimson")):
+        fd.add_hline(y=y, line_dash="dot", line_color=color,
+                     annotation_text=lbl,
+                     annotation_font=dict(size=11, color=color))
+    fd.add_hline(y=0, line_color="gray", line_width=1)
+    if not td.empty:
+        sel = td[td.index >= cutoff]
+        fd.add_scatter(x=sel.index, y=sel, name="turbine discharge (m³/s)",
+                       yaxis="y2", mode="markers",
+                       marker=dict(size=4, color="steelblue", opacity=0.5))
+        sel30 = td30[td30.index >= cutoff]
+        fd.add_scatter(x=sel30.index, y=sel30, name="discharge 30-day mean",
+                       yaxis="y2", line=dict(color="steelblue", width=2))
+    fd.update_layout(
+        title="Kariba drawdown monitor — recent weeks",
+        height=420, margin=dict(t=40, b=0),
+        yaxis=dict(title="level fall, m/week"),
+        yaxis2=dict(title="m³/s", overlaying="y", side="right",
+                    showgrid=False, rangemode="tozero"),
+        legend=dict(orientation="h", y=-0.12))
+    st.plotly_chart(fd, use_container_width=True)
+    st.caption(
+        "The drawdown rate (level fall per week, positive = falling) is "
+        "the red-flag variable: it responds to generation decisions weeks "
+        "before load shedding is announced. Sustained readings above "
+        "0.15 m/wk put the 478m severe-rationing boundary in play before "
+        "the mid-February refill; above 0.20 m/wk it is reached by "
+        "mid-January regardless of the rains. Discharge dots show the "
+        "turbine flow driving the drawdown (window limited to the "
+        "gap-free scrape era). Thresholds calibrated in the "
+        "elnino-hydro-dashboard project on 2017–2026 seasons.")
     st.stop()
 
 # ======================== ZONE DETAIL =====================================
