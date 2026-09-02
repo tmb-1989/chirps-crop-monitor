@@ -6,7 +6,12 @@ and southern Africa. Scoping in [SCOPING.md](SCOPING.md).
 ## Data flow
 
 USGS FEWS NET GeoEngine 5 API (pre-computed zonal means over
-`fews_shapefile_cropzones`) → SQLite (`db/monitor.sqlite`) → Streamlit.
+`fews_shapefile_cropzones`) → SQLite → Streamlit. Storage is split:
+`db/monitor.sqlite` (~54MB) holds the observation/metrics/flood history
+and is committed on dekad days; `db/live.sqlite` (~700KB: risk board,
+ENSO/IOD, Kariba, GEFS, alerts) is committed daily. `db.connect()` and
+the app ATTACH live.sqlite, so table names are unqualified everywhere;
+`ingest/split_db.py` is the one-off migration.
 
 Datasets per zone: CHIRPS pentad/monthly (final + prelim), CHIRPS monthly
 anom/z-score, LWRSI dekadal (data + % of median), FLDAS soil moisture
