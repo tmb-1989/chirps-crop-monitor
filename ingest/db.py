@@ -46,7 +46,10 @@ CREATE TABLE IF NOT EXISTS revisions (
 
 def connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(DB_PATH)
+    # 60s busy timeout: long backfills and ad-hoc tools (or a .backup for
+    # the data-update commit) share this file; the default 5s killed an
+    # hours-long backfill mid-run when a backup held the lock.
+    con = sqlite3.connect(DB_PATH, timeout=60)
     con.executescript(SCHEMA)
     return con
 

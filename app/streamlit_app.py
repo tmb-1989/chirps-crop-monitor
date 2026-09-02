@@ -178,7 +178,7 @@ if view == "Country risk":
         st.stop()
 
     FACTORS = [("enso", "El Niño / ENSO"), ("drought", "Drought"),
-               ("flood", "Flood")]
+               ("flood", "Flood"), ("hydro", "Hydropower")]
 
     cell = {(r.country, r.factor): r for _, r in cr.iterrows()}
     rows, fills = [], []
@@ -217,7 +217,73 @@ if view == "Country risk":
         "(El Niño ≈ OND floods in East Africa but main-season drought in "
         "southern Africa); 'developing' is detection, not a forecast. "
         "Drought = in-season WRSI, SPI-3 and soil moisture over crop "
-        "zones; flood = the backtested basin flood-watch layer.")
+        "zones; flood = the backtested basin flood-watch layer. "
+        "Hydropower = Lake Kariba level, usable storage and 4-week "
+        "drawdown rate (Zambia only so far). East African ENSO cells are "
+        "amplified by the Indian Ocean Dipole when it aligns with the "
+        "ENSO phase (|DMI| ≥ 0.4).")
+
+    # ---- climate drivers & Kariba ----------------------------------------
+    with st.expander("Climate drivers — weekly Niño 3.4, IOD, Kariba"):
+        cA, cB = st.columns(2)
+        wk = load("SELECT date, nino34_anom FROM enso_weekly "
+                  "WHERE date >= '2014-01-01' ORDER BY date")
+        dmi = load("SELECT date, dmi FROM iod_dmi_oisst "
+                   "WHERE date >= '2014-01-01' ORDER BY date")
+        with cA:
+            if not wk.empty:
+                fe = go.Figure()
+                fe.add_scatter(x=pd.to_datetime(wk.date), y=wk.nino34_anom,
+                               name="Niño 3.4 weekly", line=dict(
+                                   color="crimson", width=1.5))
+                if not dmi.empty:
+                    fe.add_scatter(x=pd.to_datetime(dmi.date), y=dmi.dmi,
+                                   name="IOD (DMI, OISST)",
+                                   line=dict(color="steelblue", width=1.5))
+                fe.add_hline(y=0, line_color="gray", line_width=1)
+                for y in (0.5, -0.5):
+                    fe.add_hline(y=y, line_dash="dot", line_color="gray")
+                fe.update_layout(title="ENSO & Indian Ocean Dipole (°C "
+                                       "anomaly)", height=320,
+                                 margin=dict(t=40, b=0),
+                                 legend=dict(orientation="h", y=-0.15))
+                st.plotly_chart(fe, use_container_width=True)
+                st.caption("El Niño/La Niña beyond ±0.5; the IOD amplifies "
+                           "or offsets ENSO's East Africa OND signal "
+                           "(positive = wet East Africa). DMI lags ~1-2 "
+                           "months (OISST monthly).")
+        kb = load("SELECT date, level_m FROM ("
+                  "SELECT date, level_m FROM kariba_reservoir WHERE "
+                  "level_m IS NOT NULL UNION SELECT date, level_m FROM "
+                  "kariba_level WHERE level_m IS NOT NULL) "
+                  "ORDER BY date")
+        with cB:
+            if not kb.empty:
+                kb["date"] = pd.to_datetime(kb.date)
+                kb = kb.drop_duplicates("date", keep="last")
+                fk = go.Figure()
+                fk.add_scatter(x=kb.date, y=kb.level_m, name="level",
+                               line=dict(color="seagreen"),
+                               connectgaps=False)
+                fk.add_hline(y=478, line_dash="dot", line_color="crimson",
+                             annotation_text="478m severe rationing",
+                             annotation_font=dict(size=11, color="crimson"))
+                fk.add_hline(y=475.5, line_dash="dot", line_color="darkred",
+                             annotation_text="475.5m min operating level",
+                             annotation_position="bottom right",
+                             annotation_font=dict(size=11, color="darkred"))
+                fk.update_layout(title="Lake Kariba level (m, ZRA)",
+                                 height=320, margin=dict(t=40, b=0),
+                                 showlegend=False)
+                fk.update_yaxes(range=[474.5,
+                                       max(490.0, kb.level_m.max() + 1)])
+                st.plotly_chart(fk, use_container_width=True)
+                st.caption("Zambia hydropower risk feed: scraped ZRA "
+                           "gauge, history seeded from the "
+                           "elnino-hydro-dashboard archive (2017–). "
+                           "Sustained 4-week drawdown >0.15 m/wk puts "
+                           "478m in play before the mid-Feb refill; "
+                           ">0.20 m/wk reaches it by mid-January.")
 
     # ---- drought drill-down: one light per growing region ----------------
     drought_region_block(expander=True)

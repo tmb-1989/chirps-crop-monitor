@@ -28,6 +28,8 @@ sys.path.insert(0, str(ROOT / "ingest"))
 sys.path.insert(0, str(ROOT / "compute"))
 import db  # noqa: E402
 import enso  # noqa: E402
+import iod  # noqa: E402
+import kariba  # noqa: E402
 from flood_signals import FLOOD_MONTHS, basin_countries  # noqa: E402
 
 NAMES = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
@@ -63,7 +65,21 @@ EXPOSURE = {
 }
 
 # staleness thresholds (days) before a factor goes gray
-STALE = {"wrsi": 45, "sm": 90, "spi": 30, "flood": 20}
+STALE = {"wrsi": 45, "sm": 90, "spi": 30, "flood": 20, "kariba": 14,
+         "iod": 90}  # DMI is a slow seasonal index; ~63d OISST lag is normal
+
+# IOD modifier: countries whose OND short rains the dipole loads. Positive
+# DMI amplifies El Niño's wet signal (2019 floods); negative DMI compounds
+# La Niña's dry signal (2020-22 five failed seasons).
+IOD_COUNTRIES = {"KEN", "ETH", "TZA", "UGA", "RWA"}
+IOD_THRESHOLD = 0.4
+
+# Kariba hydro thresholds. 475.50 m is the minimum operating level; the
+# source project's calibration puts the severe-rationing boundary at 478 m
+# and flags sustained drawdown >0.15 m/wk (boundary in play before the
+# mid-Feb refill) and >0.20 m/wk (boundary reached by mid-Jan regardless).
+KARIBA_RED = {"level_m": 478.0, "pct_full": 10.0, "rate": 0.20}
+KARIBA_YEL = {"level_m": 480.0, "pct_full": 20.0, "rate": 0.15}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS country_risk (
@@ -121,39 +137,93 @@ def in_season(seasons: str | None, month: int) -> bool:
 
 # ---------------------------------------------------------------- factors
 def enso_status(con, today: dt.date) -> dict:
-    """iso3 -> (status, reason, as_of); one global phase, per-country
-    exposure. Impact window = current month..+3."""
-    rows = con.execute("SELECT season, year, center_month, total, anom "
-                       "FROM enso ORDER BY year, center_month").fetchall()
+    """iso3 -> (status, reason, as_of); one global phase (ONI sharpened by
+    the weekly Niño 3.4), per-country exposure, IOD modifier for the
+    countries whose OND rains the dipole loads. Impact window = current
+    month..+3."""
+    p = enso.phase_from_db(con)
     out = {}
-    if not rows:
+    if not p:
         return {c: ("gray", "no ONI data — run ingest/enso.py", None)
                 for c in ORDER}
-    p = enso.phase(rows)
     as_of = f"{p['season']} {p['year']}"
+    wk = ""
+    if p.get("weekly_anom") is not None:
+        as_of = p["weekly_date"]
+        if _age(p["weekly_date"], today) > 21:
+            wk = f", weekly Niño3.4 stale ({p['weekly_date']})"
+        else:
+            wk = f", wkly {p['weekly_anom']:+.1f}"
     # ONI is a 3-month running mean; latest center month ~1-2 months back
-    last = dt.date(rows[-1][1], rows[-1][2], 1)
-    stale = (today - last).days > 100
+    oni_last = con.execute("SELECT max(year*12+center_month) FROM enso"
+                           ).fetchone()[0]
+    stale = (today.year * 12 + today.month) - oni_last > 3
+    # IOD modifier (near-real-time OISST DMI)
+    dmi = iod.latest_dmi(con)
+    iod_note, iod_amp = "", False
+    if dmi and dmi[2] <= STALE["iod"]:
+        if dmi[1] >= IOD_THRESHOLD:
+            iod_note, iod_amp = f"; +IOD {dmi[1]:+.1f} amplifies", "elnino"
+        elif dmi[1] <= -IOD_THRESHOLD:
+            iod_note, iod_amp = f"; −IOD {dmi[1]:+.1f} compounds", "lanina"
     window = {(today.month - 1 + k) % 12 + 1 for k in range(4)}
     for c in ORDER:
         if stale:
-            out[c] = ("gray", f"ONI stale (through {as_of})", as_of)
+            out[c] = ("gray", f"ONI stale (through {p['season']} "
+                              f"{p['year']})", as_of)
             continue
         if p["phase"] == "neutral":
-            out[c] = ("green", f"ENSO neutral (ONI {p['anom']:+.1f})", as_of)
+            out[c] = ("green", f"ENSO neutral (ONI {p['anom']:+.1f}{wk})",
+                      as_of)
             continue
         months, note = EXPOSURE[c][p["phase"]]
         name = "El Niño" if p["phase"] == "elnino" else "La Niña"
-        lab = f"{name} {p['tier']} (ONI {p['anom']:+.1f})"
+        lab = f"{name} {p['tier']} (ONI {p['anom']:+.1f}{wk})"
         near = bool(window & months)
-        if p["tier"] == "active" and near:
-            out[c] = ("red", f"{lab}: {note}", as_of)
+        amp = c in IOD_COUNTRIES and iod_amp == p["phase"]
+        tail = iod_note if c in IOD_COUNTRIES and iod_note else ""
+        if near and (p["tier"] == "active" or amp):
+            out[c] = ("red", f"{lab}: {note}{tail}", as_of)
         elif near:
-            out[c] = ("yellow", f"{lab}: {note}", as_of)
+            out[c] = ("yellow", f"{lab}: {note}{tail}", as_of)
         elif p["tier"] == "active":
-            out[c] = ("yellow", f"{lab} — impact season later: {note}", as_of)
+            out[c] = ("yellow", f"{lab} — impact season later: {note}",
+                      as_of)
         else:
             out[c] = ("green", f"{lab} — impact season months away", as_of)
+    return out
+
+
+def hydro_status(con, today: dt.date) -> dict:
+    """iso3 -> (status, reason, as_of). Zambia only for now, from the
+    Kariba level/drawdown monitor; other countries gray until their
+    stations are wired in."""
+    out = {c: ("gray", "no hydropower monitor for this country", None)
+           for c in ORDER}
+    s = kariba.latest_state(con)
+    if not s:
+        out["ZMB"] = ("gray", "no Kariba data — run ingest/kariba.py", None)
+        return out
+    if _age(s["date"], today) > STALE["kariba"]:
+        out["ZMB"] = ("gray", f"Kariba data stale (through {s['date']})",
+                      s["date"])
+        return out
+    lvl, pct, rate = s["level_m"], s["pct_full"], s["drawdown_m_wk"]
+    desc = f"Kariba {lvl:.2f}m" + \
+        (f", {pct:.0f}% usable" if pct is not None else "") + \
+        (f", drawdown {rate:.2f} m/wk" if rate is not None else "")
+    if (lvl < KARIBA_RED["level_m"]
+            or (pct is not None and pct < KARIBA_RED["pct_full"])
+            or (rate is not None and rate >= KARIBA_RED["rate"])):
+        out["ZMB"] = ("red", f"{desc} — severe-rationing boundary in play",
+                      s["date"])
+    elif (lvl < KARIBA_YEL["level_m"]
+            or (pct is not None and pct < KARIBA_YEL["pct_full"])
+            or (rate is not None and rate >= KARIBA_YEL["rate"])):
+        out["ZMB"] = ("yellow", f"{desc} — approaching rationing "
+                                "thresholds", s["date"])
+    else:
+        out["ZMB"] = ("green", desc, s["date"])
     return out
 
 
@@ -293,7 +363,8 @@ def main() -> int:
     zr = drought_zones(con, today)
     factors = {"enso": enso_status(con, today),
                "drought": drought_status(zr),
-               "flood": flood_status(con, today)}
+               "flood": flood_status(con, today),
+               "hydro": hydro_status(con, today)}
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
     con.executemany(
         "INSERT OR REPLACE INTO zone_risk VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",

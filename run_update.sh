@@ -7,6 +7,8 @@ cd "$(dirname "$0")"
 git pull --rebase --autostash origin main
 ./venv/bin/python ingest/run_ingest.py
 ./venv/bin/python ingest/enso.py
+./venv/bin/python ingest/iod.py
+./venv/bin/python ingest/kariba.py
 ./venv/bin/python ingest/chirps_raster.py
 ./venv/bin/python ingest/flood_raster.py
 ./venv/bin/python compute/metrics.py

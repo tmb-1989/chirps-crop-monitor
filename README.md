@@ -32,10 +32,20 @@ anom/z-score, LWRSI dekadal (data + % of median), FLDAS soil moisture
 ## Country risk board
 
 Traffic-light matrix (green/yellow/red/gray) per country × risk factor —
-**ENSO, drought, flood** so far (hydropower planned) — the dashboard's
-landing view. `ingest/enso.py` pulls NOAA CPC's ONI; a per-country
-exposure table converts the global phase into country lights (El Niño ≈
-OND flood risk in East Africa, main-season drought in southern Africa).
+**ENSO, drought, flood, hydropower** — the dashboard's landing view.
+`ingest/enso.py` pulls NOAA CPC's ONI + weekly Niño SSTs (the weekly
+Niño 3.4 anomaly sharpens the 'developing' call by 1-2 months); a
+per-country exposure table converts the global phase into country lights
+(El Niño ≈ OND flood risk in East Africa, main-season drought in
+southern Africa). `ingest/iod.py` computes a near-real-time Indian Ocean
+Dipole index from NOAA OISST (validated against PSL's HadISST DMI); an
+aligned |DMI| ≥ 0.4 amplifies East African ENSO cells. `ingest/kariba.py`
+scrapes Lake Kariba level/storage/discharge from the Zambezi River
+Authority and computes the 4-week drawdown rate, feeding the Zambia
+hydropower light (thresholds: 478m severe-rationing boundary, drawdown
+0.15/0.20 m/wk). ENSO/IOD/Kariba ingest + thresholds ported from the
+sibling elnino-hydro-dashboard project, which also seeded the Kariba
+history (2017–) via `ingest/kariba.py --import-legacy`.
 Drought aggregates in-season WRSI / SPI-3 / soil moisture over crop
 zones; flood reads the flood-watch layer. Worst-case aggregation — the
 most stressed zone/basin colors the country and is named in the cell.
