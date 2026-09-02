@@ -80,11 +80,26 @@ dashboard view with a country selector.
 ./venv/bin/python compute/flood_signals.py
 ```
 
-Calibration status: Kenya's regional-alert rule is backtested at 71%
-precision / all major events caught (1999–2026). The extension countries
-reuse the same thresholds and rule; their event catalogs are approximate
-EM-DAT/FloodList-informed windows and each country's backtest prints its
-own hit/false-alarm record — check it before leaning on those alerts.
+Calibration status (backfill completed 2 Sep 2026; Kenya thresholds
+applied unchanged, ~28yr backtest against approximate EM-DAT/FloodList
+event windows):
+
+| Country | Precision | Recall | Read |
+|---|---|---|---|
+| Kenya | 71% | 11/15 (all majors) | calibrated — usable |
+| Tanzania | 38% | 6/8 | recall OK, noisy — usable with care |
+| Rwanda | 36% | 4/6 | recall OK, noisy — usable with care |
+| Ethiopia | 29% | 2/11 | NOT usable — kiremt riverine floods need |
+| | | | different signatures/basins |
+| Uganda | 20% | 2/7 | NOT usable — events are single-basin |
+| | | | (Bududa, Kasese); regional ≥2-basin rule misfits |
+
+Ethiopia and Uganda need per-country calibration (F2 redo): Ethiopia's
+floods are highland-rain→lowland-river events the % -of-normal
+saturation signature undersees during high-normal kiremt months; most
+Uganda disasters are localized to one basin. Until then their board
+flood cells reflect a rule with a poor record — read them as basin
+telemetry, not alerts.
 
 ## Phase 2: local CHIRPS v3 raster pipeline
 
