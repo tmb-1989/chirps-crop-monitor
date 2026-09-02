@@ -14,6 +14,9 @@ import plotly.graph_objects as go
 import streamlit as st
 
 DB = pathlib.Path(__file__).resolve().parent.parent / "db" / "monitor.sqlite"
+# fast-moving tables (risk board, ENSO/IOD, Kariba, GEFS, alerts) live in a
+# small separate file committed daily; see ingest/split_db.py
+LIVE = DB.parent / "live.sqlite"
 CLIM_START, CLIM_END = 1991, 2020
 
 st.set_page_config(page_title="El Niño Sovereign Risk Monitor",
@@ -23,6 +26,8 @@ st.set_page_config(page_title="El Niño Sovereign Risk Monitor",
 @st.cache_data(ttl=600)
 def load(query: str, params=()) -> pd.DataFrame:
     con = sqlite3.connect(DB)
+    if LIVE.exists():
+        con.execute("ATTACH DATABASE ? AS live", (str(LIVE),))
     df = pd.read_sql_query(query, con, params=params)
     con.close()
     return df
@@ -587,14 +592,9 @@ if view == "Flood watch":
                              "evidence of anything.")
         else:
             st.caption(msg)
-    has_country = not load(
-        "SELECT name FROM pragma_table_info('flood_alerts') "
-        "WHERE name='country'").empty
     hist_al = load(
         "SELECT granule_start, state, detail, recorded_at FROM flood_alerts "
-        + ("WHERE country=? " if has_country else "")
-        + "ORDER BY granule_start DESC LIMIT 12",
-        (iso3,) if has_country else ())
+        "WHERE country=? ORDER BY granule_start DESC LIMIT 12", (iso3,))
     with st.expander(f"Alert history ({len(hist_al)} recorded)"):
         if hist_al.empty:
             st.caption("No regional alerts recorded since the layer went "

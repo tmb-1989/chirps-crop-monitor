@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS flood_state (
     signature     TEXT,
     PRIMARY KEY (zone_key, granule_start)
 );
-CREATE TABLE IF NOT EXISTS flood_gefs (
+CREATE TABLE IF NOT EXISTS live.flood_gefs (
     zone_key   TEXT NOT NULL,
     issue_date TEXT NOT NULL,
     horizon    TEXT NOT NULL,
@@ -357,18 +357,19 @@ def main() -> int:
     # persist state transitions for the cron log / downstream consumers.
     # Migrate the pre-extension Kenya-only table (PK granule_start, no
     # country column) to a per-country PK.
-    cols = [r[1] for r in con.execute("PRAGMA table_info(flood_alerts)")]
+    cols = [r[1] for r in con.execute(
+        "SELECT * FROM pragma_table_info('flood_alerts', 'live')")]
     if cols and "country" not in cols:
         con.executescript(
-            "ALTER TABLE flood_alerts RENAME TO flood_alerts_old;"
-            "CREATE TABLE flood_alerts (country TEXT NOT NULL, "
+            "ALTER TABLE live.flood_alerts RENAME TO flood_alerts_old;"
+            "CREATE TABLE live.flood_alerts (country TEXT NOT NULL, "
             "granule_start TEXT NOT NULL, state TEXT, detail TEXT, "
             "recorded_at TEXT, PRIMARY KEY (country, granule_start));"
-            "INSERT INTO flood_alerts SELECT 'KEN', granule_start, state, "
-            "detail, recorded_at FROM flood_alerts_old;"
-            "DROP TABLE flood_alerts_old;")
+            "INSERT INTO live.flood_alerts SELECT 'KEN', granule_start, "
+            "state, detail, recorded_at FROM live.flood_alerts_old;"
+            "DROP TABLE live.flood_alerts_old;")
     else:
-        con.execute("CREATE TABLE IF NOT EXISTS flood_alerts ("
+        con.execute("CREATE TABLE IF NOT EXISTS live.flood_alerts ("
                     "country TEXT NOT NULL, granule_start TEXT NOT NULL, "
                     "state TEXT, detail TEXT, recorded_at TEXT, "
                     "PRIMARY KEY (country, granule_start))")
@@ -398,9 +399,9 @@ def main() -> int:
                         f"active since {reg.iloc[-1].date()}, latest pentad "
                         f"{clatest}. See the flood-watch dashboard.")
     # heartbeat so 'no alert' is distinguishable from 'not running'
-    con.execute("CREATE TABLE IF NOT EXISTS flood_runs (id INTEGER PRIMARY "
-                "KEY CHECK (id=1), last_run TEXT, latest_pentad TEXT, "
-                "regional TEXT)")
+    con.execute("CREATE TABLE IF NOT EXISTS live.flood_runs (id INTEGER "
+                "PRIMARY KEY CHECK (id=1), last_run TEXT, latest_pentad "
+                "TEXT, regional TEXT)")
     con.execute("INSERT OR REPLACE INTO flood_runs VALUES (1,?,?,?)",
                 (dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
                  latest, " ".join(summary)))

@@ -54,11 +54,11 @@ TIME_BLOCK = 120
 INTER_REQUEST_S = 2
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS iod_dmi (
+CREATE TABLE IF NOT EXISTS live.iod_dmi (
     date TEXT PRIMARY KEY,
     dmi  REAL
 );
-CREATE TABLE IF NOT EXISTS iod_dmi_oisst (
+CREATE TABLE IF NOT EXISTS live.iod_dmi_oisst (
     date TEXT PRIMARY KEY,
     dmi  REAL,
     anom_west REAL,

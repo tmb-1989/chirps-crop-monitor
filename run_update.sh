@@ -14,8 +14,14 @@ git pull --rebase --autostash origin main
 ./venv/bin/python compute/metrics.py
 ./venv/bin/python compute/flood_signals.py
 ./venv/bin/python compute/country_risk.py
-# push refreshed DB so the deployed Streamlit app stays current
-git add db/monitor.sqlite
+# push refreshed data so the deployed Streamlit app stays current.
+# live.sqlite (risk board, ENSO/IOD, Kariba — a few hundred KB) goes daily;
+# the ~54MB monitor.sqlite only on dekad days, since sqlite binaries don't
+# delta-compress and daily commits would grow the repo by GBs/month.
+git add db/live.sqlite
+case $(date +%-d) in
+  3|8|13|18|23|28) git add db/monitor.sqlite;;
+esac
 git diff --cached --quiet || git commit -m "data update $(date +%F)"
 git push origin main
 echo "update complete: $(date)"

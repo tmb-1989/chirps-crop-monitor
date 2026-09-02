@@ -40,7 +40,7 @@ CENTER = {"DJF": 1, "JFM": 2, "FMA": 3, "MAM": 4, "AMJ": 5, "MJJ": 6,
           "JJA": 7, "JAS": 8, "ASO": 9, "SON": 10, "OND": 11, "NDJ": 12}
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS enso (
+CREATE TABLE IF NOT EXISTS live.enso (
     season TEXT NOT NULL,
     year   INTEGER NOT NULL,
     center_month INTEGER NOT NULL,
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS enso (
     anom   REAL,
     PRIMARY KEY (season, year)
 );
-CREATE TABLE IF NOT EXISTS enso_weekly (
+CREATE TABLE IF NOT EXISTS live.enso_weekly (
     date TEXT PRIMARY KEY,
     nino12_sst REAL, nino12_anom REAL,
     nino3_sst  REAL, nino3_anom  REAL,

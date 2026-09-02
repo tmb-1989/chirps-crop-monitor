@@ -6,6 +6,9 @@ import pathlib
 import sqlite3
 
 DB_PATH = pathlib.Path(__file__).resolve().parent.parent / "db" / "monitor.sqlite"
+# Fast-moving small tables live in a separate file so the daily cron can
+# commit it without committing the ~54MB history DB (see ingest/split_db.py).
+LIVE_PATH = DB_PATH.parent / "live.sqlite"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS zones (
@@ -50,6 +53,9 @@ def connect() -> sqlite3.Connection:
     # the data-update commit) share this file; the default 5s killed an
     # hours-long backfill mid-run when a backup held the lock.
     con = sqlite3.connect(DB_PATH, timeout=60)
+    # attach the live DB: unqualified names resolve into it for tables
+    # that exist only there, so readers don't need qualifying
+    con.execute("ATTACH DATABASE ? AS live", (str(LIVE_PATH),))
     con.executescript(SCHEMA)
     return con
 

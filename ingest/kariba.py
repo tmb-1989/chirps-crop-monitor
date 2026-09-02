@@ -43,14 +43,14 @@ LEGACY_DIR = pathlib.Path(__file__).resolve().parent.parent.parent / \
     "elnino-hydro-dashboard" / "data" / "series"
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS kariba_level (
+CREATE TABLE IF NOT EXISTS live.kariba_level (
     date TEXT NOT NULL,
     level_m REAL,
     pct_full REAL,
     vintage TEXT,
     PRIMARY KEY (date, vintage)
 );
-CREATE TABLE IF NOT EXISTS kariba_reservoir (
+CREATE TABLE IF NOT EXISTS live.kariba_reservoir (
     date TEXT PRIMARY KEY,
     level_m REAL,
     pct_full REAL,

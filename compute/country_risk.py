@@ -82,7 +82,7 @@ KARIBA_RED = {"level_m": 478.0, "pct_full": 10.0, "rate": 0.20}
 KARIBA_YEL = {"level_m": 480.0, "pct_full": 20.0, "rate": 0.15}
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS country_risk (
+CREATE TABLE IF NOT EXISTS live.country_risk (
     country  TEXT NOT NULL,
     factor   TEXT NOT NULL,
     status   TEXT NOT NULL,
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS country_risk (
     computed_at TEXT,
     PRIMARY KEY (country, factor)
 );
-CREATE TABLE IF NOT EXISTS country_risk_log (
+CREATE TABLE IF NOT EXISTS live.country_risk_log (
     country  TEXT NOT NULL,
     factor   TEXT NOT NULL,
     status   TEXT NOT NULL,
@@ -99,7 +99,7 @@ CREATE TABLE IF NOT EXISTS country_risk_log (
     reason   TEXT,
     changed_at TEXT
 );
-CREATE TABLE IF NOT EXISTS zone_risk (
+CREATE TABLE IF NOT EXISTS live.zone_risk (
     zone_key TEXT NOT NULL,
     factor   TEXT NOT NULL,
     country  TEXT NOT NULL,
