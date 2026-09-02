@@ -174,8 +174,10 @@ season_metrics; the current season is always kept.
   just re-run once the 403s stop.
 
 Update cadence: prelim pentads land ~2 days after the 5th/10th/15th/20th/25th/
-end-of-month. Cron (installed): 07:30 on the 3rd/8th/13th/18th/23rd/28th runs
-`run_update.sh`, logging to `data/cron.log`.
+end-of-month; ZRA Kariba and CHIRPS-GEFS update daily; weekly Niño weekly.
+Cron (installed): **daily 07:30** runs `run_update.sh`, logging to
+`data/cron.log` (CHIRPS granules between updates are skipped as already
+ingested, so off-dekad days are cheap).
 
 ## API notes (reverse-engineered from the EWX viewer, Aug 2026)
 
