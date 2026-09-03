@@ -48,16 +48,24 @@ BASINS = {
                        "TZA"),
     "bas_mwanza":    (-2.55, 32.90, "Lake Victoria south shore (Mwanza)",
                       "TZA"),
+    "bas_wami":      (-6.83, 36.98, "Wami/Mkondoa at Kilosa", "TZA"),
+    "bas_lindi":     (-9.90, 39.40, "Lindi/Mtwara coast", "TZA"),
     # --- Rwanda ---
     "bas_nyabarongo": (-1.95, 30.00, "Nyabarongo (Kigali)", "RWA"),
     "bas_sebeya":    (-1.65, 29.30, "Sebeya / NW highlands (Rubavu)", "RWA"),
     "bas_akanyaru":  (-2.45, 29.90, "Akanyaru / Bugesera south", "RWA"),
+    # NB: the Musanze/Gakenke landslide belt (Mukungwa) falls inside the
+    # bas_nyabarongo level-7 polygon — already covered, no separate basin.
+    "bas_rusizi":    (-2.65, 29.02, "Rusizi / Bugarama plain", "RWA"),
     # --- Uganda ---
     "bas_elgon":     (0.95, 34.30, "Mt Elgon west (Manafwa/Bududa)", "UGA"),
     "bas_kampala":   (0.35, 32.60, "Kampala / Lake Victoria north", "UGA"),
     "bas_nyamwamba": (0.18, 30.10, "Nyamwamba / Rwenzori east (Kasese)",
                       "UGA"),
     "bas_kyoga":     (1.65, 33.55, "Lake Kyoga lowlands (Teso)", "UGA"),
+    # NB: Mbale (Nabuyonga/Namatala) shares the bas_elgon level-7 polygon —
+    # already covered; the 2022 miss was signature, not coverage.
+    "bas_semliki":   (1.00, 30.45, "Semliki flats (Ntoroko)", "UGA"),
 }
 
 # headwater -> downstream pairing with approximate routing lag (days)

@@ -632,10 +632,12 @@ if view == "Flood watch":
         "ETH": ["bas_laketana", "bas_baro", "bas_omo_low", "bas_awash_hw",
                 "bas_awash_mid", "bas_diredawa", "bas_shabelle_hw",
                 "bas_shabelle_mid", "bas_genale"],
-        "TZA": ["bas_mwanza", "bas_pangani_hw", "bas_dar", "bas_kilombero",
-                "bas_rufiji_low"],
-        "RWA": ["bas_sebeya", "bas_nyabarongo", "bas_akanyaru"],
-        "UGA": ["bas_nyamwamba", "bas_kampala", "bas_kyoga", "bas_elgon"],
+        "TZA": ["bas_mwanza", "bas_pangani_hw", "bas_wami", "bas_dar",
+                "bas_kilombero", "bas_rufiji_low", "bas_lindi"],
+        "RWA": ["bas_sebeya", "bas_nyabarongo", "bas_akanyaru",
+                "bas_rusizi"],
+        "UGA": ["bas_semliki", "bas_nyamwamba", "bas_kampala", "bas_kyoga",
+                "bas_elgon"],
     }
     BORDER = [zk for zk in ORDER.get(iso3, czones) if zk in czones] + \
         [zk for zk in czones if zk not in ORDER.get(iso3, [])]
