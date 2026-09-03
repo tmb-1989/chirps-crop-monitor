@@ -36,6 +36,10 @@ BASINS = {
     "bas_baro":      (8.25, 34.60, "Baro at Gambela", "ETH"),
     "bas_laketana":  (11.85, 37.70, "Lake Tana east (Fogera plain)", "ETH"),
     "bas_shabelle_hw": (7.05, 39.90, "Shabelle headwaters (Bale)", "ETH"),
+    "bas_diredawa":  (9.60, 41.85, "Dire Dawa (Dechatu)", "ETH"),
+    "bas_omo_low":   (5.30, 36.10, "Lower Omo flood plain", "ETH"),
+    "bas_shabelle_mid": (6.00, 43.40, "Shabelle at Gode/Kelafo", "ETH"),
+    "bas_genale":    (4.35, 41.95, "Genale-Dawa at Dolo Ado", "ETH"),
     # --- Tanzania ---
     "bas_dar":       (-6.85, 39.20, "Dar es Salaam (Msimbazi)", "TZA"),
     "bas_kilombero": (-8.25, 36.30, "Kilombero valley", "TZA"),
@@ -61,6 +65,7 @@ DOWNSTREAM = {
     "bas_nzoia_hw": ("bas_nzoia_low", "2-5"),
     "bas_tana_hw": ("bas_tana_mid", "3-7"),
     "bas_awash_hw": ("bas_awash_mid", "2-5"),
+    "bas_shabelle_hw": ("bas_shabelle_mid", "4-8"),
     "bas_kilombero": ("bas_rufiji_low", "3-7"),
 }
 

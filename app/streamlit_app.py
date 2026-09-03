@@ -629,8 +629,9 @@ if view == "Flood watch":
     ORDER = {
         "KEN": ["bas_nzoia_hw", "bas_nzoia_low", "bas_lakeshore",
                 "bas_nairobi", "bas_tana_hw", "bas_tana_mid", "bas_ewaso"],
-        "ETH": ["bas_laketana", "bas_baro", "bas_awash_hw", "bas_awash_mid",
-                "bas_shabelle_hw"],
+        "ETH": ["bas_laketana", "bas_baro", "bas_omo_low", "bas_awash_hw",
+                "bas_awash_mid", "bas_diredawa", "bas_shabelle_hw",
+                "bas_shabelle_mid", "bas_genale"],
         "TZA": ["bas_mwanza", "bas_pangani_hw", "bas_dar", "bas_kilombero",
                 "bas_rufiji_low"],
         "RWA": ["bas_sebeya", "bas_nyabarongo", "bas_akanyaru"],
