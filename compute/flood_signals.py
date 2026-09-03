@@ -51,21 +51,30 @@ CLIM_START, CLIM_END = 1991, 2020
 ANTE_WINDOW = 18  # pentads (~3 months)
 
 # Per-country signature/rule parameters from compute/flood_calibrate.py
-# (3 Sep 2026, PROVISIONAL: calibrated on the basins with complete
-# backfills; rerun after the 8 new basins finish backfilling).
+# (final, 3 Sep 2026, all 32 basins backfilled; basin-subset search
+# included — see TELEMETRY_ONLY).
 # arm: antecedent percentile to arm; hot: heavy-pentad percentile;
 # consec: consecutive hot pentads for a watch; floor: absolute mm floor;
 # region: (min armed, min alerting) basins for a country regional alert.
 # Calibration (episodes 1999-2026): precision/recall/major-recall
-#   KEN 88/73/100  ETH 56/55/50  TZA 47/88/100  RWA 60/50/67  UGA 30/43/75
+#   KEN 88/73/100  ETH 56/64/67  TZA 40/88/100  RWA 60/50/67  UGA 30/43/75
 PARAMS = {
     "KEN": dict(arm=80, hot=90, consec=2, floor=25, region=(2, 1)),
-    "ETH": dict(arm=80, hot=95, consec=1, floor=15, region=(2, 1)),
-    "TZA": dict(arm=90, hot=90, consec=1, floor=15, region=(2, 1)),
+    "ETH": dict(arm=80, hot=95, consec=1, floor=25, region=(2, 1)),
+    "TZA": dict(arm=90, hot=90, consec=1, floor=5, region=(2, 1)),
     "RWA": dict(arm=90, hot=90, consec=2, floor=5, region=(2, 1)),
     "UGA": dict(arm=90, hot=95, consec=1, floor=5, region=(2, 1)),
 }
 ALERT_HOT = 97  # alert tier: hot pentad also above this percentile
+
+# Telemetry-only basins: computed, stored and displayed (incl. downstream
+# labels) but EXCLUDED from the regional alert — the basin-subset
+# calibration showed each of these degrades its country's precision
+# without adding recall (arid/flash catchments with noisy percentile
+# stats). Gode (ETH) and Lindi (TZA) earned alert-rule seats; these did
+# not.
+TELEMETRY_ONLY = {"bas_diredawa", "bas_genale", "bas_omo_low",
+                  "bas_wami", "bas_rusizi", "bas_semliki"}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS flood_state (
@@ -319,6 +328,7 @@ def regional_series(states: pd.DataFrame, iso3: str) -> pd.Series:
     ["region"] = (r1 armed, r2 alerting) in the same pentad, inside that
     country's flood-season months. Calibration record in PARAMS."""
     r1, r2 = PARAMS[iso3]["region"]
+    states = states[~states.zone_key.isin(TELEMETRY_ONLY)]
     g = states.groupby("granule_start").agg(
         n1=("tier", lambda t: (t >= 1).sum()),
         n2=("tier", lambda t: (t >= 2).sum()))

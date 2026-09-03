@@ -30,7 +30,8 @@ import db  # noqa: E402
 import enso  # noqa: E402
 import iod  # noqa: E402
 import kariba  # noqa: E402
-from flood_signals import FLOOD_MONTHS, PARAMS, basin_countries  # noqa: E402
+from flood_signals import (FLOOD_MONTHS, PARAMS, TELEMETRY_ONLY,  # noqa: E402
+                           basin_countries)
 
 NAMES = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
          "RWA": "Rwanda", "UGA": "Uganda", "ZMB": "Zambia",
@@ -338,18 +339,23 @@ def flood_status(con, today: dt.date) -> dict:
                       latest)
             continue
         cur = cf[cf.granule_start == latest]
-        n1 = int((cur.tier >= 1).sum())
-        n2 = int((cur.tier >= 2).sum())
+        # telemetry-only basins inform the yellow tier but not the
+        # calibrated regional (red) rule
+        rule = cur[~cur.zone_key.isin(TELEMETRY_ONLY)]
+        n1 = int((rule.tier >= 1).sum())
+        n2 = int((rule.tier >= 2).sum())
         month = dt.date.fromisoformat(latest).month
         season = month in FLOOD_MONTHS[c]
         armed_fc = cur[(cur.ante_pct >= 90)
                        & cur.zone_key.isin(wet_fc)].zone_key.tolist()
         r1, r2 = PARAMS[c]["region"]
+        n1_all = int((cur.tier >= 1).sum())
         if season and n1 >= r1 and n2 >= r2:
             out[c] = ("red", f"regional alert: {n2} basin(s) alerting, "
                              f"{n1} armed", latest)
-        elif (season and n1 >= 1) or armed_fc:
-            why = (f"{n1} basin(s) at watch/alert" if season and n1 >= 1
+        elif (season and n1_all >= 1) or armed_fc:
+            why = (f"{n1_all} basin(s) at watch/alert" if season and
+                   n1_all >= 1
                    else f"armed + wet GEFS 10-day: {len(armed_fc)} basin(s)")
             out[c] = ("yellow", why, latest)
         else:

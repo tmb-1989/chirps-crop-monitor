@@ -80,27 +80,30 @@ dashboard view with a country selector.
 ./venv/bin/python compute/flood_signals.py
 ```
 
-Calibration status (3 Sep 2026, per-country signature/rule recalibration
-via `compute/flood_calibrate.py` — percentile-based heavy-pentad test
+Calibration status (final, 3 Sep 2026, all 32 basins backfilled;
+`compute/flood_calibrate.py` — percentile-based heavy-pentad test
 replacing %-of-normal + fixed mm floors, parameters in
 `flood_signals.PARAMS`; ~28yr in-sample backtest against approximate
-EM-DAT/FloodList event windows; PROVISIONAL pending the 8 new basins'
-backfill):
+EM-DAT/FloodList event windows):
 
 | Country | Precision | Recall | Majors | vs Kenya-thresholds baseline |
 |---|---|---|---|---|
-| Kenya | 88% | 11/15 | all | up from 71% — the percentile signature wins on the pilot too |
-| Ethiopia | 56% | 6/11 | 5/8* | up from 29/2-of-11; now catches 2020 Awash + 2023 deyr |
-| Tanzania | 47% | 7/8 | all | up from 38/6-of-8 |
-| Rwanda | 60% | 3/6 | 2/4 | precision up from 36; landslide events stay hard |
-| Uganda | 30% | 3/7 | 3/4 | up from 20/2-of-7; Bududa'10 now caught |
+| Kenya | 88% | 11/15 | all | up from 71%; 2 false alarms in 28yrs |
+| Ethiopia | 56% | 7/11 | 2/3 gu+deyr, kiremt partial | up from 29/2-of-11 |
+| Tanzania | 40% | 7/8 | all | up from 38/6-of-8; only Kilosa'10 missed |
+| Rwanda | 60% | 3/6 | 2/4 | precision up from 36; landslides stay hard |
+| Uganda | 30% | 3/7 | 3/4 | up from 20/2-of-7; Bududa'10 caught |
 
-\* Ethiopia's remaining misses (2006 Dire Dawa/Omo, 2024) await the four
-new basins' backfill. Uganda's misses (Bududa 2018, Kasese, Mbale) are
-short-burst, single-catchment events at the edge of what pentad-scale
-rainfall can see — treat Uganda's regional alert as weak evidence
-either way. The calibrated ≥2-basin rule survived everywhere (the
-1-basin variant always lost on false alarms).
+The basin-subset search also produced a telemetry/alert split
+(`flood_signals.TELEMETRY_ONLY`): Gode (ETH) and Lindi (TZA) earned
+seats in the regional rule, while the arid flash catchments added for
+coverage (Dire Dawa, Genale, lower Omo, Wami, Rusizi, Semliki) are
+monitored and displayed — ‡ in the dashboard — but excluded from the
+alert rule, where each degraded precision without adding recall.
+Uganda's remaining misses (Bududa'18, Kasese, Mbale) are short-burst
+single-catchment events at the edge of pentad-scale resolution — treat
+its regional alert as weak evidence either way. The ≥2-basin rule
+survived everywhere; the 1-basin variant always lost on false alarms.
 
 ## Phase 2: local CHIRPS v3 raster pipeline
 
