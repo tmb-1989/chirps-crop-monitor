@@ -542,7 +542,8 @@ if view == "Flood watch":
     import sys as _sys
     _sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent
                             / "compute"))
-    from flood_signals import COUNTRY, EVENTS, FLOOD_MONTHS  # noqa: E402
+    from flood_signals import (COUNTRY, EVENTS, FLOOD_MONTHS,  # noqa: E402
+                               PARAMS)
 
     gj = _json.loads(open(pathlib.Path(__file__).resolve().parent.parent /
                           "data" / "zones" / "basins.geojson").read())
@@ -567,11 +568,12 @@ if view == "Flood watch":
     latest_p = fs.granule_start.max()
     cur = fs[fs.granule_start == latest_p].set_index("zone_key")
 
-    # regional state: >=2 basins armed, >=1 alerting, in flood-season months
+    # regional state: calibrated per-country rule (PARAMS), in season
+    r1, r2 = PARAMS[iso3]["region"]
     lat_month = pd.Timestamp(latest_p).month
     n1 = int((cur.tier >= 1).sum())
     n2 = int((cur.tier >= 2).sum())
-    regional = (n1 >= 2 and n2 >= 1 and lat_month in FLOOD_MONTHS[iso3])
+    regional = (n1 >= r1 and n2 >= r2 and lat_month in FLOOD_MONTHS[iso3])
     if regional:
         st.error(f"{COUNTRY[iso3].upper()} REGIONAL FLOOD ALERT — "
                  f"{n2} basin(s) alerting, {n1} armed (as of {latest_p})")
@@ -648,7 +650,7 @@ if view == "Flood watch":
         for d, grp in df.groupby("date"):
             n1 = int((grp.tier >= 1).sum())
             n2 = int((grp.tier >= 2).sum())
-            if n1 >= 2 and n2 >= 1 and d.month in FLOOD_MONTHS[iso3]:
+            if n1 >= r1 and n2 >= r2 and d.month in FLOOD_MONTHS[iso3]:
                 sigs = set(grp[grp.tier >= 2].signature.dropna())
                 rows.append((d, "whiplash" if sigs == {"whiplash"}
                              else "saturation"))

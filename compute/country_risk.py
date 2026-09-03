@@ -30,7 +30,7 @@ import db  # noqa: E402
 import enso  # noqa: E402
 import iod  # noqa: E402
 import kariba  # noqa: E402
-from flood_signals import FLOOD_MONTHS, basin_countries  # noqa: E402
+from flood_signals import FLOOD_MONTHS, PARAMS, basin_countries  # noqa: E402
 
 NAMES = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
          "RWA": "Rwanda", "UGA": "Uganda", "ZMB": "Zambia",
@@ -344,7 +344,8 @@ def flood_status(con, today: dt.date) -> dict:
         season = month in FLOOD_MONTHS[c]
         armed_fc = cur[(cur.ante_pct >= 90)
                        & cur.zone_key.isin(wet_fc)].zone_key.tolist()
-        if season and n1 >= 2 and n2 >= 1:
+        r1, r2 = PARAMS[c]["region"]
+        if season and n1 >= r1 and n2 >= r2:
             out[c] = ("red", f"regional alert: {n2} basin(s) alerting, "
                              f"{n1} armed", latest)
         elif (season and n1 >= 1) or armed_fc:
