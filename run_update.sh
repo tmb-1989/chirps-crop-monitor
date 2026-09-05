@@ -6,9 +6,11 @@ cd "$(dirname "$0")"
 # end-of-run push (non-fast-forward)
 git pull --rebase --autostash origin main
 ./venv/bin/python ingest/run_ingest.py
-./venv/bin/python ingest/enso.py
-./venv/bin/python ingest/iod.py
-./venv/bin/python ingest/kariba.py
+# climate-index ingests are non-fatal: an upstream outage (e.g. NOAA THREDDS
+# 503s) should leave that index one day stale, not block the whole update
+./venv/bin/python ingest/enso.py || echo "WARN: enso ingest failed, continuing with stale data"
+./venv/bin/python ingest/iod.py || echo "WARN: iod ingest failed, continuing with stale data"
+./venv/bin/python ingest/kariba.py || echo "WARN: kariba ingest failed, continuing with stale data"
 ./venv/bin/python ingest/chirps_raster.py
 ./venv/bin/python ingest/flood_raster.py
 ./venv/bin/python compute/metrics.py
