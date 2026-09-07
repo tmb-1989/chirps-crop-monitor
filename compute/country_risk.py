@@ -242,6 +242,42 @@ def enso_status(con, today: dt.date) -> dict:
     return out
 
 
+def iod_status(con, today: dt.date) -> dict:
+    """iso3 -> (status, reason, as_of): the dipole as its own light for
+    the countries whose OND short rains it loads; gray elsewhere. Sign
+    maps to hazard side: positive = wet East Africa (flood), negative =
+    failed short rains (drought). Colors are hottest when the OND window
+    is within the 3-month lookahead."""
+    out = {c: ("gray", "IOD does not load this country's seasons", None)
+           for c in ORDER}
+    dmi = iod.latest_dmi(con)
+    if not dmi:
+        for c in IOD_COUNTRIES:
+            out[c] = ("gray", "no DMI data — run ingest/iod.py", None)
+        return out
+    date, val, lag = dmi
+    if lag > STALE["iod"]:
+        for c in IOD_COUNTRIES:
+            out[c] = ("gray", f"DMI stale (through {date})", date)
+        return out
+    near = bool({(today.month - 1 + k) % 12 + 1 for k in range(4)}
+                & {10, 11, 12})
+    side = ("wet East Africa — flood side" if val > 0
+            else "dry East Africa — failed-rains side")
+    if abs(val) >= IOD_RED:
+        state = ("red" if near else "yellow",
+                 f"DMI {val:+.2f} — flood-year-class dipole, {side}"
+                 + ("" if near else " (OND window months away)"), date)
+    elif abs(val) >= IOD_THRESHOLD:
+        state = ("yellow", f"DMI {val:+.2f} — dipole event underway, "
+                           f"{side}", date)
+    else:
+        state = ("green", f"DMI {val:+.2f} — no dipole signal", date)
+    for c in IOD_COUNTRIES:
+        out[c] = state
+    return out
+
+
 def hydro_status(con, today: dt.date) -> dict:
     """iso3 -> (status, reason, as_of). Zambia only for now, from the
     Kariba level/drawdown monitor; other countries gray until their
@@ -416,6 +452,7 @@ def main() -> int:
     con.executescript(SCHEMA)
     zr = drought_zones(con, today)
     factors = {"enso": enso_status(con, today),
+               "iod": iod_status(con, today),
                "drought": drought_status(zr),
                "flood": flood_status(con, today),
                "hydro": hydro_status(con, today)}
