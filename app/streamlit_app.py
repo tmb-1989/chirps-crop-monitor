@@ -117,6 +117,12 @@ def drought_region_block(expander: bool = True) -> None:
     zrisk = load("SELECT * FROM zone_risk WHERE factor='drought'")
     if zrisk.empty:
         return
+    try:
+        shock = load("SELECT zone_key, shock, shock_p10, shock_p90, "
+                     "provisional FROM zone_output_shock WHERE in_season=1"
+                     ).set_index("zone_key")
+    except Exception:  # table absent until compute/cpi_impulse.py runs
+        shock = pd.DataFrame()
     rank = {"red": 3, "yellow": 2, "green": 1, "gray": 0}
     zrisk["_r"] = zrisk.status.map(rank)
     zrisk["_c"] = zrisk.country.map(
@@ -151,15 +157,26 @@ def drought_region_block(expander: bool = True) -> None:
                 sm_txt = f"{z.sm:.0f}%"
                 sm_fill = FILL["red"] if z.sm < 82 else \
                     FILL["yellow"] if z.sm < 85 else FILL["green"]
+            os_txt, os_fill = "—", ""
+            if not shock.empty and z.zone_key in shock.index \
+                    and pd.notna(shock.loc[z.zone_key, "shock"]):
+                s = shock.loc[z.zone_key]
+                os_txt = (f"{s.shock:.0%} "
+                          f"[{s.shock_p10:.0%}–{s.shock_p90:.0%}]"
+                          + (" ·prov" if s.provisional else ""))
+                os_fill = FILL["red"] if s.shock >= 0.4 else \
+                    FILL["yellow"] if s.shock >= 0.2 else FILL["green"]
             drows.append({
                 "Country": NAMES_CR.get(z.country, z.country),
                 "Region": f"{DOT[z.status]} {z['name']}",
                 "WRSI %med": wr_txt, "SPI-3": sp_txt,
-                "Soil moisture": sm_txt, "Driver": z.reason})
+                "Soil moisture": sm_txt, "Output shock": os_txt,
+                "Driver": z.reason})
             dfills.append({
                 "Country": "", "Region": FILL[z.status],
                 "WRSI %med": wr_fill, "SPI-3": sp_fill,
-                "Soil moisture": sm_fill, "Driver": ""})
+                "Soil moisture": sm_fill, "Output shock": os_fill,
+                "Driver": ""})
         dtbl, dfill = pd.DataFrame(drows), pd.DataFrame(dfills)
         dstyled = dtbl.style.apply(
             lambda col: [f"background-color: {dfill.loc[i, col.name]}"
@@ -173,7 +190,10 @@ def drought_region_block(expander: bool = True) -> None:
             "reads ~100 and shouldn't drive a light). Readings are colored "
             "by their own thresholds — WRSI <80 / <95, SPI-3 ≤−1.5 / ≤−1, "
             "soil moisture <82% / <85% — so you can see which indicator "
-            "trips a light, not just that one did.")
+            "trips a light, not just that one did. Output shock = implied "
+            "share of the zone's water-limited yield lost (FAO Ky × WRSI "
+            "deficit, P10–P90 band; ·prov = season still running, can "
+            "only worsen).")
 
 
 if view == "Country risk":
@@ -283,6 +303,56 @@ if view == "Country risk":
                            "Africa OND short rains (1997/2019 floods), "
                            "negative = failed short rains (2020-22). "
                            "DMI lags ~1-2 months (OISST monthly).")
+
+    # ---- food-CPI impulse (SCOPING-CPI) ----------------------------------
+    try:
+        imp = load("SELECT * FROM cpi_impulse ORDER BY cpi_pp DESC")
+    except Exception:
+        imp = pd.DataFrame()
+    if not imp.empty:
+        with st.expander(
+                f"Food-CPI impulse — {len(imp)} country(ies) in season",
+                expanded=bool((imp.cpi_pp >= 1).any())):
+            fc = go.Figure()
+            names = [NAMES_CR.get(c, c) for c in imp.country]
+            fc.add_bar(
+                x=names, y=imp.cpi_pp,
+                error_y=dict(type="data", symmetric=False,
+                             array=imp.cpi_p90 - imp.cpi_pp,
+                             arrayminus=imp.cpi_pp - imp.cpi_p10),
+                marker_color=["crimson" if v >= 2 else "orange"
+                              if v >= 1 else "seagreen"
+                              for v in imp.cpi_pp])
+            fc.update_layout(
+                title="Estimated food-CPI impulse from in-season crop "
+                      "water stress (pp, P10–P90)",
+                height=300, margin=dict(t=40, b=0), showlegend=False)
+            st.plotly_chart(fc, use_container_width=True)
+            dt_ = imp.assign(
+                Country=names,
+                Shock=[f"{r.out_shock:.0%} [{r.out_p10:.0%}–{r.out_p90:.0%}]"
+                       for _, r in imp.iterrows()],
+                Impulse=[f"+{r.cpi_pp:.1f}pp [{r.cpi_p10:.1f}–"
+                         f"{r.cpi_p90:.1f}]" for _, r in imp.iterrows()],
+                Coverage=[f"{r.coverage:.0%}" for _, r in imp.iterrows()],
+                Elasticity=imp.elasticity,
+                Status=["provisional (in season)" if r.provisional
+                        else "season complete" for _, r in imp.iterrows()],
+            )[["Country", "Shock", "Impulse", "Coverage", "Elasticity",
+               "Status"]]
+            st.dataframe(dt_, hide_index=True, use_container_width=True)
+            st.caption(
+                "Chain: zone WRSI → FAO Ky yield loss → production-"
+                "weighted national shock (Coverage = share of national "
+                "production our zones represent — the rest is assumed "
+                "0–50% as affected) → staple price via elasticity "
+                "(fitted on our own WRSI/price history where usable, "
+                "IMF-informed prior 1.5 otherwise; capped at +50% import "
+                "parity) → CPI via food weight × staple share. Ceteris "
+                "paribus on FX and policy (export bans, subsidies, duty "
+                "waivers all break the elasticity — Kenya 2026 did all "
+                "three). The band is the estimate; the midpoint is not. "
+                "See SCOPING-CPI.md.")
 
     # ---- drought drill-down: one light per growing region ----------------
     drought_region_block(expander=True)

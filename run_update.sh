@@ -11,10 +11,12 @@ git pull --rebase --autostash origin main
 ./venv/bin/python ingest/enso.py || echo "WARN: enso ingest failed, continuing with stale data"
 ./venv/bin/python ingest/iod.py || echo "WARN: iod ingest failed, continuing with stale data"
 ./venv/bin/python ingest/kariba.py || echo "WARN: kariba ingest failed, continuing with stale data"
+./venv/bin/python ingest/prices.py || echo "WARN: price ingest failed, continuing with stale data"
 ./venv/bin/python ingest/chirps_raster.py
 ./venv/bin/python ingest/flood_raster.py
 ./venv/bin/python compute/metrics.py
 ./venv/bin/python compute/flood_signals.py
+./venv/bin/python compute/cpi_impulse.py
 ./venv/bin/python compute/country_risk.py
 # push refreshed data so the deployed Streamlit app stays current.
 # live.sqlite (risk board, ENSO/IOD, Kariba — a few hundred KB) goes daily;
