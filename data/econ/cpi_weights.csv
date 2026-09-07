@@ -1,0 +1,12 @@
+iso3,food_cpi_weight,staple_share_food,staple_commodity,note
+KEN,0.33,0.12,Maize,"KNBS 2019 rebase food+non-alc 32.9%; maize products ~10-14% of food basket; v1 estimate"
+ETH,0.54,0.15,Maize,"ESS high food weight ~53-57%; cereals dominate, maize+wheat split; v1 estimate"
+TZA,0.28,0.15,Maize,"NBS 2020 rebase ~28%; maize/rice staples; v1 estimate"
+RWA,0.31,0.12,Maize,"NISR ~27-32% depending on urban/rural; v1 estimate"
+UGA,0.29,0.10,Maize,"UBOS 2020 rebase ~28-32%; matooke competes as staple; v1 estimate"
+ZMB,0.53,0.25,Maize,"ZamStats food ~53%; mealie meal heavy; v1 estimate"
+MWI,0.50,0.28,Maize,"NSO food ~50%; maize dominant staple; v1 estimate"
+ZWE,0.33,0.20,Maize,"ZimStat blended; USD/ZWL duality distorts - see SCOPING-CPI 8; v1 estimate"
+MOZ,0.36,0.15,Maize,"INE ~36%; maize + rice; v1 estimate"
+MDG,0.47,0.30,Rice,"INSTAT high food weight; rice-led; v1 estimate"
+ZAF,0.17,0.05,Maize,"StatsSA food+NAB 17.1%; maize meal small urban share; v1 estimate"
