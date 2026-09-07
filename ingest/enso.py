@@ -114,6 +114,12 @@ def phase(rows: list[tuple], weekly: list[tuple] | None = None) -> dict:
             out.update(phase=name,
                        tier="active" if streak >= 5 else "developing")
             break
+    # magnitude, independent of the duration-based tier: a fast-ramping
+    # event (e.g. ONI +1.8 after 3 seasons) is "strong" long before the
+    # 5-season streak calls it "active"
+    mag = abs(latest[4])
+    out["strength"] = "strong" if mag >= 1.5 else \
+        "moderate" if mag >= 1.0 else "weak"
     if weekly:
         wk = weekly[-1]
         out["weekly_anom"], out["weekly_date"] = wk[6], wk[0]

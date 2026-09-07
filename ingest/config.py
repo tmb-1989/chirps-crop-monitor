@@ -42,6 +42,10 @@ ZONES = {
     # Eastern region is Uganda's main maize producer (Iganga-Mbale corridor)
     "uga_eastern":    ("UGA", "Uganda Eastern maize belt", 1.2051, 33.6634,
                        [("first", 3, 6), ("second", 8, 11)]),
+    # Eastern Province is Rwanda's main grain surplus area; the EWX crop
+    # zone here is the sorghum polygon (fid 44) covering the whole belt
+    "rwa_eastern":    ("RWA", "Rwanda Eastern Province (Nyagatare)", -1.30, 30.32,
+                       [("season_a", 9, 1), ("season_b", 2, 6)]),
     "zmb_central":    ("ZMB", "Zambia Central maize belt", -14.40, 28.40,
                        [("main", 10, 4)]),
     "zmb_southern":   ("ZMB", "Zambia Southern province", -16.80, 27.00,

@@ -69,11 +69,17 @@ EXPOSURE = {
 STALE = {"wrsi": 45, "sm": 90, "spi": 30, "flood": 20, "kariba": 14,
          "iod": 90}  # DMI is a slow seasonal index; ~63d OISST lag is normal
 
-# IOD modifier: countries whose OND short rains the dipole loads. Positive
-# DMI amplifies El Niño's wet signal (2019 floods); negative DMI compounds
-# La Niña's dry signal (2020-22 five failed seasons).
-IOD_COUNTRIES = {"KEN", "ETH", "TZA", "UGA", "RWA"}
-IOD_THRESHOLD = 0.4
+# IOD-led countries: the OND short rains respond to the Indian Ocean
+# dipole more directly than to ENSO (whose influence is largely mediated
+# through it) — enhanced rains under El Niño alone are often beneficial;
+# the flood years (1997, 2019) had a strongly positive IOD, and 2019 had
+# no El Niño at all. DMI leads the light; ENSO phase is congruence
+# context. Ethiopia stays ENSO-led: the kiremt drought channel is the
+# dominant food-security link and is directly ENSO-driven.
+IOD_LED = {"KEN", "TZA", "UGA", "RWA"}
+IOD_COUNTRIES = IOD_LED | {"ETH"}   # DMI shown in the reason text
+IOD_THRESHOLD = 0.4                 # watch level
+IOD_RED = 0.75                      # flood-year territory (1997/2019 class)
 
 # Kariba hydro thresholds. 475.50 m is the minimum operating level; the
 # source project's calibration puts the severe-rationing boundary at 478 m
@@ -159,35 +165,76 @@ def enso_status(con, today: dt.date) -> dict:
     oni_last = con.execute("SELECT max(year*12+center_month) FROM enso"
                            ).fetchone()[0]
     stale = (today.year * 12 + today.month) - oni_last > 3
-    # IOD modifier (near-real-time OISST DMI)
+    # near-real-time OISST DMI: leads the light for IOD_LED countries,
+    # congruence modifier for the rest of IOD_COUNTRIES
     dmi = iod.latest_dmi(con)
-    iod_note, iod_amp = "", False
-    if dmi and dmi[2] <= STALE["iod"]:
-        if dmi[1] >= IOD_THRESHOLD:
-            iod_note, iod_amp = f"; +IOD {dmi[1]:+.1f} amplifies", "elnino"
-        elif dmi[1] <= -IOD_THRESHOLD:
-            iod_note, iod_amp = f"; −IOD {dmi[1]:+.1f} compounds", "lanina"
+    dmi_val = dmi[1] if dmi and dmi[2] <= STALE["iod"] else None
+    iod_amp = ""
+    if dmi_val is not None:
+        if dmi_val >= IOD_THRESHOLD:
+            iod_amp = "elnino"
+        elif dmi_val <= -IOD_THRESHOLD:
+            iod_amp = "lanina"
     window = {(today.month - 1 + k) % 12 + 1 for k in range(4)}
+    strong = p.get("strength") == "strong"
     for c in ORDER:
         if stale:
             out[c] = ("gray", f"ONI stale (through {p['season']} "
                               f"{p['year']})", as_of)
             continue
+
+        # --- IOD-led OND short rains (EA minus Ethiopia) ---------------
+        if c in IOD_LED and dmi_val is not None:
+            near = bool(window & {10, 11, 12})
+            pname = {"neutral": "ENSO neutral", "elnino": "El Niño",
+                     "lanina": "La Niña"}[p["phase"]]
+            lab = f"DMI {dmi_val:+.1f}, {pname} (ONI {p['anom']:+.1f}{wk})"
+            congruent = iod_amp and iod_amp == p["phase"]
+            if near and dmi_val >= IOD_RED:
+                out[c] = ("red", f"{lab}: +IOD in flood-year territory — "
+                                 "extreme OND short rains", as_of)
+            elif near and dmi_val >= IOD_THRESHOLD:
+                out[c] = ("red" if congruent else "yellow",
+                          f"{lab}: +IOD loading the short rains"
+                          + (" — El Niño reinforces" if congruent else ""),
+                          as_of)
+            elif near and dmi_val <= -IOD_THRESHOLD:
+                out[c] = ("red" if congruent else "yellow",
+                          f"{lab}: −IOD — failed short rains risk"
+                          + (" — La Niña compounds" if congruent else ""),
+                          as_of)
+            elif near and p["phase"] != "neutral":
+                side = ("enhanced short rains — beneficial unless IOD "
+                        "turns positive" if p["phase"] == "elnino"
+                        else "drier short rains — watch for −IOD")
+                out[c] = ("yellow" if strong else "green",
+                          f"{lab}: {side}", as_of)
+            else:
+                out[c] = ("green", f"{lab}: no dipole signal for the "
+                                   "coming season", as_of)
+            continue
+
+        # --- ENSO-led (Ethiopia kiremt + Southern Africa) --------------
         if p["phase"] == "neutral":
             out[c] = ("green", f"ENSO neutral (ONI {p['anom']:+.1f}{wk})",
                       as_of)
             continue
         months, note = EXPOSURE[c][p["phase"]]
         name = "El Niño" if p["phase"] == "elnino" else "La Niña"
-        lab = f"{name} {p['tier']} (ONI {p['anom']:+.1f}{wk})"
+        tier = f"{p['tier']}/{p['strength']}" \
+            if p.get("strength") != "weak" else p["tier"]
+        lab = f"{name} {tier} (ONI {p['anom']:+.1f}{wk})"
         near = bool(window & months)
         amp = c in IOD_COUNTRIES and iod_amp == p["phase"]
-        tail = iod_note if c in IOD_COUNTRIES and iod_note else ""
-        if near and (p["tier"] == "active" or amp):
+        tail = ""
+        if c in IOD_COUNTRIES and iod_amp:
+            tail = (f"; +IOD {dmi_val:+.1f} amplifies" if iod_amp == "elnino"
+                    else f"; −IOD {dmi_val:+.1f} compounds")
+        if near and (p["tier"] == "active" or strong or amp):
             out[c] = ("red", f"{lab}: {note}{tail}", as_of)
         elif near:
             out[c] = ("yellow", f"{lab}: {note}{tail}", as_of)
-        elif p["tier"] == "active":
+        elif p["tier"] == "active" or strong:
             out[c] = ("yellow", f"{lab} — impact season later: {note}",
                       as_of)
         else:
