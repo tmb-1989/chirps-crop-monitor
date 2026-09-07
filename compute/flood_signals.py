@@ -190,6 +190,20 @@ def pentad_of_year(d: dt.date) -> int:
     return (d.month - 1) * 6 + min((d.day - 1) // 5 + 1, 6)
 
 
+def pentad_end(granule_start: str) -> str:
+    """Last day covered by the pentad starting on this date (the 6th
+    pentad runs to month end), e.g. '2026-08-26' -> 'Aug 31'. Display
+    labels should use this: a pentad's start date reads as staler than
+    the data actually is."""
+    d = dt.date.fromisoformat(granule_start)
+    if d.day >= 26:
+        import calendar
+        end = d.replace(day=calendar.monthrange(d.year, d.month)[1])
+    else:
+        end = d + dt.timedelta(days=4)
+    return end.strftime("%b %-d")
+
+
 def load_basin(con, zk: str) -> pd.DataFrame:
     df = pd.read_sql_query(
         "SELECT granule_start, value, dataset FROM observations WHERE "

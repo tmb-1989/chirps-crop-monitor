@@ -536,7 +536,7 @@ if view == "Flood watch":
     _sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent
                             / "compute"))
     from flood_signals import (COUNTRY, EVENTS, FLOOD_MONTHS,  # noqa: E402
-                               PARAMS, TELEMETRY_ONLY)
+                               PARAMS, TELEMETRY_ONLY, pentad_end)
 
     gj = _json.loads(open(pathlib.Path(__file__).resolve().parent.parent /
                           "data" / "zones" / "basins.geojson").read())
@@ -571,10 +571,12 @@ if view == "Flood watch":
     regional = (n1 >= r1 and n2 >= r2 and lat_month in FLOOD_MONTHS[iso3])
     if regional:
         st.error(f"{COUNTRY[iso3].upper()} REGIONAL FLOOD ALERT — "
-                 f"{n2} basin(s) alerting, {n1} armed (as of {latest_p})")
+                 f"{n2} basin(s) alerting, {n1} armed (rain observed "
+                 f"through {pentad_end(latest_p)})")
     else:
-        st.success(f"Regional state: clear (as of pentad starting {latest_p} "
-                   f"— {n1} basin(s) armed, {n2} alerting)")
+        st.success(f"Regional state: clear — rain observed through "
+                   f"{pentad_end(latest_p)} ({n1} basin(s) armed, "
+                   f"{n2} alerting)")
     runs = load("SELECT last_run, latest_pentad, regional FROM flood_runs "
                 "WHERE id=1")
     if not runs.empty:
@@ -582,7 +584,10 @@ if view == "Flood watch":
         age_h = (pd.Timestamp.now(tz="UTC")
                  - pd.Timestamp(r.last_run)).total_seconds() / 3600
         msg = (f"Signals last computed {r.last_run} UTC "
-               f"({age_h:.0f}h ago), data through pentad {r.latest_pentad}.")
+               f"({age_h:.0f}h ago); rainfall observed through "
+               f"{pentad_end(r.latest_pentad)} (latest CHIRPS pentad — "
+               "new pentads publish ~2-5 days after each 5-day period "
+               "closes).")
         if age_h > 24 * 7:
             st.warning(msg + " — STALE: the update pipeline may not be "
                              "running; a 'clear' state this old is not "

@@ -31,7 +31,7 @@ import enso  # noqa: E402
 import iod  # noqa: E402
 import kariba  # noqa: E402
 from flood_signals import (FLOOD_MONTHS, PARAMS, TELEMETRY_ONLY,  # noqa: E402
-                           basin_countries)
+                           basin_countries, pentad_end)
 
 NAMES = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
          "RWA": "Rwanda", "UGA": "Uganda", "ZMB": "Zambia",
@@ -418,8 +418,8 @@ def flood_status(con, today: dt.date) -> dict:
             continue
         latest = cf.granule_start.max()
         if _age(latest, today) > STALE["flood"]:
-            out[c] = ("gray", f"flood signals stale (through {latest})",
-                      latest)
+            out[c] = ("gray", "flood signals stale (rain through "
+                              f"{pentad_end(latest)})", latest)
             continue
         cur = cf[cf.granule_start == latest]
         # telemetry-only basins inform the yellow tier but not the
