@@ -162,6 +162,64 @@ EVENTS = {
     ],
 }
 
+# F5 (SCOPING-FLOODS §9): dated damage peaks per event, keyed by the
+# event's window-start date. Peak = date of peak humanitarian impact
+# (dam failure, deadliest day, peak displacement) from EM-DAT/FloodList/
+# ReliefWeb/press reporting. confidence: high = single dated disaster,
+# med = well-reported multi-day peak, low = inferred from sitrep dates.
+# None = genuinely undatable from available reporting (kept out of the
+# lead-to-peak stats rather than guessed). Kept separate from EVENTS so
+# existing (a, b, sev) unpacking is untouched.
+EVENT_PEAKS = {
+    "KEN": {
+        "2006-10-15": ("2006-12-01", "low"),   # Budalangi/NE peak displacement
+        "2012-04-01": ("2012-04-28", "med"),   # late-Apr peak reporting
+        "2013-03-15": ("2013-04-20", "low"),
+        "2015-10-15": ("2015-11-25", "low"),
+        "2018-03-01": ("2018-05-09", "high"),  # Solai/Patel dam failure
+        "2019-10-01": ("2019-11-23", "high"),  # West Pokot landslides
+        "2020-03-15": ("2020-05-01", "med"),   # peak deaths/Lake Victoria backflow
+        "2023-10-15": ("2023-11-22", "med"),   # El Niño OND peak
+        "2024-03-15": ("2024-04-29", "high"),  # Mai Mahiu / Old Kijabe dam
+        "2026-03-05": ("2026-03-07", "med"),   # Nairobi River flash phase
+    },
+    "ETH": {
+        "2005-04-15": ("2005-04-25", "low"),   # Wabi Shebelle flash floods
+        "2006-08-01": ("2006-08-06", "high"),  # Dire Dawa night flood
+        "2018-04-01": ("2018-04-28", "low"),   # Shabelle gu displacement
+        "2019-10-01": ("2019-10-25", "low"),
+        "2020-07-01": ("2020-09-01", "med"),   # Awash/Afar peak displacement
+        "2023-10-15": ("2023-11-15", "med"),   # deyr peak (Somali region)
+        "2024-04-15": ("2024-05-05", "low"),
+    },
+    "TZA": {
+        "2009-12-20": ("2009-12-25", "med"),   # Kilosa
+        "2011-12-15": ("2011-12-21", "high"),  # Dar es Salaam
+        "2014-04-01": ("2014-04-13", "low"),
+        "2018-04-01": ("2018-04-16", "med"),   # Dar
+        "2019-10-15": ("2020-01-24", "low"),   # Lindi/Mtwara late-Jan peak
+        "2023-11-01": ("2023-12-03", "high"),  # Hanang (Katesh) disaster
+        "2024-04-01": ("2024-04-25", "med"),   # PM casualty statement peak
+    },
+    "RWA": {
+        "2016-05-01": ("2016-05-08", "high"),  # Gakenke landslides
+        "2019-12-01": ("2019-12-06", "med"),   # Kigali
+        "2020-04-01": ("2020-05-06", "med"),
+        "2023-05-01": ("2023-05-03", "high"),  # NW night disaster
+    },
+    "UGA": {
+        "2007-08-15": ("2007-09-15", "low"),   # Teso peak displacement
+        "2010-03-01": ("2010-03-01", "high"),  # Bududa landslide
+        "2013-05-01": ("2013-05-01", "med"),   # Kasese Nyamwamba burst
+        "2018-10-01": ("2018-10-11", "high"),  # Bududa/Bukalasi
+        "2019-10-15": ("2019-12-04", "med"),   # Bududa early-Dec slides
+        "2020-05-01": ("2020-05-08", "high"),  # Kasese/Kilembe flood
+        "2022-07-15": ("2022-07-31", "med"),   # Mbale
+    },
+}
+# live pentad publication latency subtracted for the "operational" lead
+LIVE_LATENCY_DAYS = 5
+
 # flood-season month filter for the regional alert, per country
 FLOOD_MONTHS = {
     "KEN": {2, 3, 4, 5, 10, 11, 12},        # MAM long + OND short rains
@@ -383,6 +441,27 @@ def backtest(states: pd.DataFrame, iso3: str) -> None:
     missed = [str(a.date()) for a, b, sev in ev if str(a.date())[:7] not in
               {c[:7] for c in caught}]
     print("events missed:", ", ".join(missed) or "none")
+    # F5: lead time to the dated damage peak (SCOPING-FLOODS §9)
+    peaks = EVENT_PEAKS.get(iso3, {})
+    leads = []
+    for a, b, sev in ev:
+        pk = peaks.get(str(a.date()))
+        if pk is None:
+            continue
+        first = [e0 for e0, e1 in episodes
+                 if (a - pd.Timedelta(days=10) <= e0 <= b)
+                 or (a <= e1 <= b)]
+        if first:
+            lead = (pd.Timestamp(pk[0]) - min(first)).days
+            leads.append((str(a.date()), lead, pk[1]))
+    if leads:
+        vals = sorted(l for _, l, _ in leads)
+        med = vals[len(vals) // 2]
+        print(f"lead to damage peak (n={len(leads)} dated): "
+              f"median {med:+d}d, range [{vals[0]:+d}, {vals[-1]:+d}]; "
+              f"operational (−{LIVE_LATENCY_DAYS}d pentad latency): "
+              f"{med - LIVE_LATENCY_DAYS:+d}d")
+        print("  " + "  ".join(f"{d}:{l:+d}d({c})" for d, l, c in leads))
 
 
 def main() -> int:
