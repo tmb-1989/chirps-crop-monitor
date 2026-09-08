@@ -127,3 +127,56 @@ cyclone caveat in §8 for Mozambique.
   levels as a slow-moving arm condition.
 - Cyclone-driven Mozambique floods: CHIRPS sees the rain only ~1–2 days
   ahead via GEFS; cyclone track warnings are the real lead there.
+
+## 9. F5 — dated damage peaks (measure lead against what matters)
+*Scoped 8 Sep 2026, motivated by the lead-time audit: measured against
+month-scale catalog window starts, median "lead" is −10 to −20 days
+(alerts fire 1–3 weeks into the window) — but windows open at rain
+onset while damage usually peaks weeks later (Kenya 2018: alert
+mid-March, Patel dam failure in May). The current number understates
+operational value; nobody knows by how much.*
+
+- **Change**: `EVENTS` entries gain a fourth field `peak` — the date of
+  peak humanitarian impact (dam failure, peak displacement, deadliest
+  reports) — nullable where genuinely undatable, with the source cited
+  in an inline comment. ~50 events across 5 catalogs; one-off curation
+  from EM-DAT entry dates, FloodList article dates, ReliefWeb sitreps.
+- **Backtest additions**: per caught event, `lead_to_peak` = peak −
+  first alerting pentad; report median/IQR per country beside
+  precision/recall. Also print an *operational* lead line subtracting
+  the live pentad publication latency (~5 days) — the number a user of
+  the live board would actually have had.
+- Curation honesty: peak dates from humanitarian reporting are ±days
+  and survivorship-biased toward big events; mark low-confidence dates.
+- **Effort**: ~1 day curation + 0.5 day backtest columns.
+
+## 10. F6 — CHIRPS-GEFS reforecast backfill (forecast-aware backtest)
+*The live rule's forecast leg (armed + GEFS 10-day ≥ 180% → alert) is
+absent from the backtest, so its contribution to precision and lead is
+assumed, not measured. The archive to fix this exists.*
+
+- **Archive (verified 8 Sep 2026)**: `data.chc.ucsb.edu/products/
+  CHIRPS-GEFS/v3/{05,10,15}_day/africa/data/YYYY/c3g_YYYY.MM.DD.tif` —
+  daily issue dates 2001–2026, ~7.4 MB/file, Africa domain. v2 also
+  exists; use v3 (matches the live EWX feed).
+- **Ingest**: subsample issue dates to pentad starts (the rule's
+  cadence): 72/yr × 26 yr ≈ 1,900 files ≈ 14 GB streamed-and-discarded
+  (same machinery as flood_raster.py; verify the GEFS Africa grid
+  matches the CHIRPS pentad grid before reusing basins_masks.npz,
+  else build a second mask cache from a GEFS reference tif). 10-day
+  product only for v1. New table `flood_gefs_hist` (zone_key,
+  issue_date, fcst_mm, pct_clim) — pct_clim against the same-window
+  climatology already derivable from local pentads.
+- **Backtest v2**: replay the full live rule with the forecast leg and
+  report per country precision / recall / lead-to-peak (F5) **with and
+  without GEFS**, so the forecast's contribution is a measured delta.
+  Grid-search the 180% upgrade threshold while at it (it was chosen a
+  priori, never calibrated).
+- **Caveats**: GEFS model upgrades (2017, 2020) mean early-archive
+  skill differs from today's — report the delta by era before trusting
+  a single number. Pentad-start subsampling is conservative (a
+  mid-pentad issue could have alerted earlier). CHIRPS-GEFS is
+  downscaled/bias-corrected against CHIRPS, so %-of-climatology is
+  consistent by construction — absolute mm still isn't gospel (§8).
+- **Effort**: ingest 1–1.5 days (≈ a day of wall-clock streaming),
+  backtest rework 1–1.5 days, threshold re-calibration 0.5 day.
