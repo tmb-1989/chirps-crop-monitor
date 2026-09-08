@@ -121,3 +121,27 @@ New `compute/cpi_impulse.py`, run after `metrics.py` in the daily chain:
 - Floods destroy crops too (the wet channel WRSI cannot see) — a
   flood-hit season can have fine WRSI and a real price shock; the
   flood layer's alerts should veto "no impulse" complacency.
+
+## 9. Hindcast results (8 Sep 2026) — §5 executed
+
+Run: `python compute/cpi_impulse.py --hindcast` (prior elasticity, not
+fitted — no in-sample flattery). Two findings changed the chain:
+
+1. **Absolute LWRSI is unusable for leg A**: end-of-season absolute
+   values read ~55-60 in several zones every year (mask/window bias),
+   calling every season a 40%+ loss — price skill was coin-flip (49%
+   sign accuracy over 120 "drought" seasons). Leg A now uses LWRSI as
+   % of the zone median (pctm), which centers baselines at ~100.
+2. **Local-currency prices are unusable for ZWE-class histories**;
+   legs now compare USD prices.
+
+After both fixes: drought-season counts become sane (0-4 per country),
+sign accuracy 13/19 = **68%** (within ×2: 5/19 = 26%), correlations
++0.3 to +0.6 for southern Africa (ZWE +0.61, ZMB +0.49, MOZ +0.41),
+near zero for KEN/ETH/TZA. Interpretation: the chain has genuine skill
+where our zones cover the dominant unimodal maize season; East Africa
+fails the §5 acceptance bar mostly for coverage reasons (KEN zones see
+only the long-rains grain basket while price spikes rode short-rains/
+ASAL droughts and global markets — 2008, 2011, 2022). Next lever:
+short-rains zone coverage for KEN/ETH, or a global maize price control
+in leg B.

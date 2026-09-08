@@ -1,10 +1,19 @@
 """WRSI -> implied output shock -> food-CPI impulse (SCOPING-CPI.md).
 
-Leg A (agronomy): per zone, FAO water production function
-    yield_shock = clip(Ky * (1 - WRSI/100), 0, 1)
-with crop-specific Ky. WRSI explains ~half of yield variance (R^2
-0.52-0.61 CHIRPS-driven), so the shock carries an uncertainty band, not
-a point. Mid-season values are a ceiling-so-far, labelled provisional.
+Leg A (agronomy): per zone, FAO water production function applied to
+the LWRSI as a percent of its own zone median (pctm):
+    yield_shock = clip(Ky * (1 - pctm/100), 0, 1)
+with crop-specific Ky. The anomaly form, not absolute WRSI, is
+deliberate: end-of-season absolute LWRSI reads ~55-60 in several zones
+EVERY year (mask/window bias), which made every season a 40%+ "loss" —
+the Sep 2026 hindcast showed the absolute form has zero price skill
+(49% sign accuracy) while the pctm form reaches ~70% with sane drought
+counts. WRSI explains ~half of yield variance (R^2 0.52-0.61
+CHIRPS-driven), so the shock carries an uncertainty band, not a point.
+Mid-season values are a ceiling-so-far, labelled provisional.
+
+Prices are compared in USD (usd_kg): local-currency series are unusable
+for ZWE-class inflation/redenomination histories.
 
 Leg B (macro): production-weighted national shock (data/econ/
 production_weights.csv), price response via an elasticity fitted on our
@@ -109,7 +118,7 @@ def wrsi_at_season_end(con, zk: str, a: int, b: int,
     start, end = season_span(year, a, b)
     row = con.execute(
         "SELECT value FROM observations WHERE zone_key=? AND dataset="
-        "'lwrsi_africa_dekad_data' AND granule_start BETWEEN ? AND ? "
+        "'lwrsi_africa_dekad_pctm' AND granule_start BETWEEN ? AND ? "
         "ORDER BY granule_start DESC LIMIT 1",
         (zk, start.isoformat(), end.isoformat())).fetchone()
     return row[0] if row else None
@@ -125,7 +134,7 @@ def current_wrsi(con, zk: str, seasons: str,
             if start <= today <= end + dt.timedelta(days=60):
                 row = con.execute(
                     "SELECT value, granule_start FROM observations WHERE "
-                    "zone_key=? AND dataset='lwrsi_africa_dekad_data' AND "
+                    "zone_key=? AND dataset='lwrsi_africa_dekad_pctm' AND "
                     "granule_start BETWEEN ? AND ? "
                     "ORDER BY granule_start DESC LIMIT 1",
                     (zk, start.isoformat(), end.isoformat())).fetchone()
@@ -142,24 +151,23 @@ def leg_a(wrsi: float, ky: float, rng=None):
     return np.clip(rng.normal(shock, sd, DRAWS), 0, 1), sd
 
 
-def fit_elasticity(con, iso3: str, zones: list[dict]) -> tuple[float, int]:
-    """Regress post-harvest YoY staple price change on the end-of-season
-    production-weighted shock, through the origin. Returns (elasticity,
-    n_seasons); falls back to the prior when n < 6 or the fit leaves
-    [E_LO, E_HI]."""
+def season_pairs(con, iso3: str, zones: list[dict]) -> list[tuple]:
+    """[(year, shock, realized_dprice)] per season: end-of-season
+    production-weighted shock vs the post-harvest YoY staple price
+    change (3-month window starting the month after season end)."""
     px = pd.read_sql_query(
-        "SELECT month, price_kg FROM staple_prices WHERE iso3=? AND "
+        "SELECT month, usd_kg FROM staple_prices WHERE iso3=? AND "
         "commodity=? AND pricetype='Wholesale' ORDER BY month",
         con, params=(iso3, zones[0]["commodity"]))
     if px.empty:
         px = pd.read_sql_query(
-            "SELECT month, price_kg FROM staple_prices WHERE iso3=? AND "
+            "SELECT month, usd_kg FROM staple_prices WHERE iso3=? AND "
             "commodity=? ORDER BY month", con,
             params=(iso3, zones[0]["commodity"]))
     if px.empty:
-        return E_PRIOR, 0
+        return []
     px["month"] = pd.to_datetime(px.month)
-    px = px.set_index("month").price_kg
+    px = px.set_index("month").usd_kg
     pts = []
     zmeta = {z["zone_key"]: z for z in zones}
     seasons = {r[0]: r[1] for r in con.execute(
@@ -191,7 +199,16 @@ def fit_elasticity(con, iso3: str, zones: list[dict]) -> tuple[float, int]:
                   t0 - pd.offsets.MonthBegin(9)].mean()
         if np.isnan(cur) or np.isnan(prev) or prev <= 0:
             continue
-        pts.append((shock, cur / prev - 1))
+        pts.append((year, shock, cur / prev - 1))
+    return pts
+
+
+def fit_elasticity(con, iso3: str, zones: list[dict]) -> tuple[float, int]:
+    """Regress post-harvest YoY staple price change on the end-of-season
+    production-weighted shock, through the origin. Returns (elasticity,
+    n_seasons); falls back to the prior when n < 6 or the fit leaves
+    [E_LO, E_HI]."""
+    pts = [(s, d) for _, s, d in season_pairs(con, iso3, zones)]
     if len(pts) < 6:
         return E_PRIOR, len(pts)
     x = np.array([p[0] for p in pts])
@@ -246,9 +263,52 @@ def country_impulse(con, iso3: str, zones: list[dict], cw: dict,
     }
 
 
+def hindcast(con, pw: list[dict]) -> None:
+    """SCOPING-CPI §5: predicted (prior-elasticity — deliberately NOT
+    the fitted one, to avoid judging in-sample) vs realized de-trended
+    post-harvest price change, per country per season. 'Drought season'
+    = model shock >= 15%. Realized changes are de-trended by the
+    country's median YoY change so baseline inflation drift drops out."""
+    print("hindcast: predicted (prior e=%.1f, capped) vs realized "
+          "de-trended post-harvest price move\n" % E_PRIOR)
+    agg_sign = agg_n = 0
+    for iso3 in sorted({z["iso3"] for z in pw}):
+        zs = [z for z in pw if z["iso3"] == iso3 and z["seasons"]]
+        pairs = season_pairs(con, iso3, zs) if zs else []
+        if len(pairs) < 6:
+            print(f"=== {iso3}: only {len(pairs)} usable seasons — skipped")
+            continue
+        yrs = [y for y, _, _ in pairs]
+        shocks = np.array([s for _, s, _ in pairs])
+        realized = np.array([d for _, _, d in pairs])
+        realized = realized - np.median(realized)     # de-trend
+        pred = np.minimum(E_PRIOR * shocks, PARITY_CAP)
+        corr = float(np.corrcoef(pred, realized)[0, 1]) \
+            if pred.std() > 1e-9 else float("nan")
+        dr = shocks >= 0.15
+        hit = (realized[dr] > 0).sum()
+        within2 = ((realized[dr] > 0)
+                   & (pred[dr] / np.maximum(realized[dr], 1e-9) < 2)
+                   & (pred[dr] / np.maximum(realized[dr], 1e-9) > 0.5)).sum()
+        agg_sign += hit
+        agg_n += int(dr.sum())
+        print(f"=== {iso3}: {len(pairs)} seasons {min(yrs)}-{max(yrs)}, "
+              f"corr {corr:+.2f}; drought seasons (shock>=15%): "
+              f"{dr.sum()} — sign correct {hit}/{dr.sum()}, "
+              f"within x2 {within2}/{dr.sum()}")
+        for (y, s, _), p, r in zip(pairs, pred, realized):
+            flag = " <-- drought" if s >= 0.15 else ""
+            print(f"    {y}: shock {s:4.0%}  pred {p:+5.0%}  "
+                  f"realized {r:+5.0%}{flag}")
+    if agg_n:
+        print(f"\nALL: sign correct in {agg_sign}/{agg_n} drought "
+              f"seasons ({100 * agg_sign / agg_n:.0f}%)")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--calibrate", action="store_true")
+    ap.add_argument("--hindcast", action="store_true")
     args = ap.parse_args()
     today = dt.date.today()
     rng = np.random.default_rng(42)
@@ -260,6 +320,10 @@ def main() -> int:
     for z in pw:
         z["seasons"] = seasons.get(z["zone_key"], "")
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+
+    if args.hindcast:
+        hindcast(con, pw)
+        return 0
 
     if args.calibrate:
         for iso3 in sorted({z["iso3"] for z in pw}):

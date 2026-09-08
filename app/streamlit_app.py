@@ -191,9 +191,9 @@ def drought_region_block(expander: bool = True) -> None:
             "by their own thresholds — WRSI <80 / <95, SPI-3 ≤−1.5 / ≤−1, "
             "soil moisture <82% / <85% — so you can see which indicator "
             "trips a light, not just that one did. Output shock = implied "
-            "share of the zone's water-limited yield lost (FAO Ky × WRSI "
-            "deficit, P10–P90 band; ·prov = season still running, can "
-            "only worsen).")
+            "share of the zone's water-limited yield lost (FAO Ky × the "
+            "WRSI deficit vs the zone's own median, P10–P90 band; ·prov "
+            "= season still running, can only worsen).")
 
 
 if view == "Country risk":
