@@ -7,3 +7,4 @@ __pycache__/
 *.pyc
 .DS_Store
 data/ntfy_topic.txt
+data/alert_email.json

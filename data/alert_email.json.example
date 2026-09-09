@@ -1,0 +1,7 @@
+{
+  "smtp_host": "smtp.gmail.com",
+  "smtp_port": 587,
+  "smtp_user": "thaddeus.best@gmail.com",
+  "smtp_pass": "PASTE-GMAIL-APP-PASSWORD-HERE",
+  "to": "thaddeus.best@gmail.com"
+}

@@ -374,6 +374,40 @@ def fetch_gefs(con, basins: list) -> None:
 
 NTFY_TOPIC_FILE = pathlib.Path(__file__).resolve().parent.parent / \
     "data" / "ntfy_topic.txt"
+# email alerting: opt-in via a gitignored JSON config —
+#   {"smtp_host": "smtp.gmail.com", "smtp_port": 587,
+#    "smtp_user": "you@gmail.com", "smtp_pass": "<app password>",
+#    "to": "you@gmail.com"}
+# For Gmail create an App Password (Google Account -> Security -> 2-Step
+# Verification -> App passwords); the normal account password won't work.
+EMAIL_CONF_FILE = NTFY_TOPIC_FILE.parent / "alert_email.json"
+
+
+def _email(subject: str, body: str) -> None:
+    """Send an alert email if data/alert_email.json exists (opt-in,
+    gitignored). Failures are non-fatal — alerting must never kill the
+    run."""
+    if not EMAIL_CONF_FILE.exists():
+        return
+    try:
+        import json
+        import smtplib
+        from email.message import EmailMessage
+        conf = json.loads(EMAIL_CONF_FILE.read_text())
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = conf["smtp_user"]
+        msg["To"] = conf["to"]
+        msg.set_content(body)
+        with smtplib.SMTP(conf["smtp_host"],
+                          int(conf.get("smtp_port", 587)),
+                          timeout=60) as s:
+            s.starttls()
+            s.login(conf["smtp_user"], conf["smtp_pass"])
+            s.send_message(msg)
+        print(f"alert email sent to {conf['to']}")
+    except Exception as e:  # noqa: BLE001
+        print(f"alert email failed (non-fatal): {e}", file=sys.stderr)
 
 
 def _notify(message: str) -> None:
@@ -536,10 +570,25 @@ def main() -> int:
             con.commit()
             print(f"!! {COUNTRY[iso3]} REGIONAL FLOOD ALERT recorded — "
                   "check the dashboard")
-            if cur.rowcount > 0:  # newly recorded -> push, don't repeat
-                _notify(f"REGIONAL FLOOD ALERT ({COUNTRY[iso3]} basins): "
-                        f"active since {reg.iloc[-1].date()}, latest pentad "
-                        f"{clatest}. See the flood-watch dashboard.")
+            if cur.rowcount > 0:  # newly recorded -> push/email, don't repeat
+                hot = cf[(cf.granule_start == clatest) & (cf.tier >= 1)]
+                basins = "; ".join(
+                    f"{r.zone_key} ({'alert' if r.tier >= 2 else 'armed'}"
+                    f", {r.signature or 'saturation'})"
+                    for r in hot.itertuples()) or "see dashboard"
+                headline = (f"REGIONAL FLOOD ALERT ({COUNTRY[iso3]} "
+                            f"basins): active since {reg.iloc[-1].date()}, "
+                            f"latest pentad {clatest}.")
+                _notify(f"{headline} See the flood-watch dashboard.")
+                _email(
+                    f"REGIONAL FLOOD ALERT — {COUNTRY[iso3]}",
+                    f"{headline}\n\nTripped basins: {basins}\n\n"
+                    "Signatures: 'saturation' = sustained heavy rain on "
+                    "already-wet catchments; 'whiplash' = extreme rain on "
+                    "drought-parched ground.\n\nThis alert fires once per "
+                    "episode (no daily repeats). Check the flood-watch "
+                    "dashboard for basin detail and the GEFS 10-day "
+                    "outlook.")
     # heartbeat so 'no alert' is distinguishable from 'not running'
     con.execute("CREATE TABLE IF NOT EXISTS live.flood_runs (id INTEGER "
                 "PRIMARY KEY CHECK (id=1), last_run TEXT, latest_pentad "
