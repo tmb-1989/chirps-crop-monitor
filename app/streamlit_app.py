@@ -605,8 +605,22 @@ if view == "Flood watch":
     import sys as _sys
     _sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent
                             / "compute"))
-    from flood_signals import (COUNTRY, EVENTS, FLOOD_MONTHS,  # noqa: E402
-                               PARAMS, TELEMETRY_ONLY, pentad_end)
+    import flood_signals as _fsig  # noqa: E402
+    COUNTRY, EVENTS, FLOOD_MONTHS = (_fsig.COUNTRY, _fsig.EVENTS,
+                                     _fsig.FLOOD_MONTHS)
+    PARAMS, TELEMETRY_ONLY = _fsig.PARAMS, _fsig.TELEMETRY_ONLY
+    # getattr fallback: a stale cached flood_signals module (seen on
+    # Streamlit Cloud after rapid successive pushes) must degrade to the
+    # local helper, not take the whole view down with an ImportError
+    if hasattr(_fsig, "pentad_end"):
+        pentad_end = _fsig.pentad_end
+    else:
+        def pentad_end(granule_start: str) -> str:
+            import calendar as _cal
+            d = dt.date.fromisoformat(granule_start)
+            end = d.replace(day=_cal.monthrange(d.year, d.month)[1]) \
+                if d.day >= 26 else d + dt.timedelta(days=4)
+            return end.strftime("%b %-d")
 
     gj = _json.loads(open(pathlib.Path(__file__).resolve().parent.parent /
                           "data" / "zones" / "basins.geojson").read())
