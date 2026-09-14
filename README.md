@@ -6,7 +6,12 @@ and southern Africa. Scoping in [SCOPING.md](SCOPING.md).
 ## Data flow
 
 USGS FEWS NET GeoEngine 5 API (pre-computed zonal means over
-`fews_shapefile_cropzones`) → SQLite (`db/monitor.sqlite`) → Streamlit.
+`fews_shapefile_cropzones`) → SQLite → Streamlit. Storage is split:
+`db/monitor.sqlite` (~54MB) holds the observation/metrics/flood history
+and is committed on dekad days; `db/live.sqlite` (~700KB: risk board,
+ENSO/IOD, Kariba, GEFS, alerts) is committed daily. `db.connect()` and
+the app ATTACH live.sqlite, so table names are unqualified everywhere;
+`ingest/split_db.py` is the one-off migration.
 
 Datasets per zone: CHIRPS pentad/monthly (final + prelim), CHIRPS monthly
 anom/z-score, LWRSI dekadal (data + % of median), FLDAS soil moisture
@@ -28,6 +33,77 @@ anom/z-score, LWRSI dekadal (data + % of median), FLDAS soil moisture
 # dashboard
 ./venv/bin/streamlit run app/streamlit_app.py
 ```
+
+## Country risk board
+
+Traffic-light matrix (green/yellow/red/gray) per country × risk factor —
+**ENSO, drought, flood, hydropower** — the dashboard's landing view.
+`ingest/enso.py` pulls NOAA CPC's ONI + weekly Niño SSTs (the weekly
+Niño 3.4 anomaly sharpens the 'developing' call by 1-2 months); a
+per-country exposure table converts the global phase into country lights
+(El Niño ≈ OND flood risk in East Africa, main-season drought in
+southern Africa). `ingest/iod.py` computes a near-real-time Indian Ocean
+Dipole index from NOAA OISST (validated against PSL's HadISST DMI); an
+aligned |DMI| ≥ 0.4 amplifies East African ENSO cells. `ingest/kariba.py`
+scrapes Lake Kariba level/storage/discharge from the Zambezi River
+Authority and computes the 4-week drawdown rate, feeding the Zambia
+hydropower light (thresholds: 478m severe-rationing boundary, drawdown
+0.15/0.20 m/wk). ENSO/IOD/Kariba ingest + thresholds ported from the
+sibling elnino-hydro-dashboard project, which also seeded the Kariba
+history (2017–) via `ingest/kariba.py --import-legacy`.
+Drought aggregates in-season WRSI / SPI-3 / soil moisture over crop
+zones; flood reads the flood-watch layer. Worst-case aggregation — the
+most stressed zone/basin colors the country and is named in the cell.
+Gray = inputs missing or stale, never "safe". Snapshot in `country_risk`,
+transitions in `country_risk_log`, per-zone drought lights (the board's
+drill-down expander) in `zone_risk` (`compute/country_risk.py`).
+
+## Flood-watch layer
+
+Basin-level flood signals over 24 HydroBASINS level-7 basins in **Kenya
+(pilot), Ethiopia, Tanzania, Rwanda, Uganda** — scoping in
+[SCOPING-FLOODS.md](SCOPING-FLOODS.md). Pentad CHIRPS v3 zonal means per
+basin (`ingest/flood_raster.py`), saturation/whiplash tiers + per-country
+regional alerts and backtests (`compute/flood_signals.py`), "Flood watch"
+dashboard view with a country selector.
+
+```bash
+# one-off: basin polygons (needs data/raw/hybas_af_lev07_v1c.shp from
+# https://data.hydrosheds.org/file/HydroBASINS/standard/hybas_af_lev07_v1c.zip)
+./venv/bin/python ingest/flood_zones.py
+
+# pentad backfill over basins (--full: 1981-present, ~4-5h at CHC's rate limit;
+# delete data/zones/basins_masks.npz first if basins changed)
+./venv/bin/python ingest/flood_raster.py --full
+
+# signals + per-country regional alerts + backtests
+./venv/bin/python compute/flood_signals.py
+```
+
+Calibration status (final, 3 Sep 2026, all 32 basins backfilled;
+`compute/flood_calibrate.py` — percentile-based heavy-pentad test
+replacing %-of-normal + fixed mm floors, parameters in
+`flood_signals.PARAMS`; ~28yr in-sample backtest against approximate
+EM-DAT/FloodList event windows):
+
+| Country | Precision | Recall | Majors | vs Kenya-thresholds baseline |
+|---|---|---|---|---|
+| Kenya | 88% | 11/15 | all | up from 71%; 2 false alarms in 28yrs |
+| Ethiopia | 56% | 7/11 | 2/3 gu+deyr, kiremt partial | up from 29/2-of-11 |
+| Tanzania | 40% | 7/8 | all | up from 38/6-of-8; only Kilosa'10 missed |
+| Rwanda | 60% | 3/6 | 2/4 | precision up from 36; landslides stay hard |
+| Uganda | 30% | 3/7 | 3/4 | up from 20/2-of-7; Bududa'10 caught |
+
+The basin-subset search also produced a telemetry/alert split
+(`flood_signals.TELEMETRY_ONLY`): Gode (ETH) and Lindi (TZA) earned
+seats in the regional rule, while the arid flash catchments added for
+coverage (Dire Dawa, Genale, lower Omo, Wami, Rusizi, Semliki) are
+monitored and displayed — ‡ in the dashboard — but excluded from the
+alert rule, where each degraded precision without adding recall.
+Uganda's remaining misses (Bududa'18, Kasese, Mbale) are short-burst
+single-catchment events at the edge of pentad-scale resolution — treat
+its regional alert as weak evidence either way. The ≥2-basin rule
+survived everywhere; the 1-basin variant always lost on false alarms.
 
 ## Phase 2: local CHIRPS v3 raster pipeline
 
@@ -122,8 +198,10 @@ season_metrics; the current season is always kept.
   just re-run once the 403s stop.
 
 Update cadence: prelim pentads land ~2 days after the 5th/10th/15th/20th/25th/
-end-of-month. Cron (installed): 07:30 on the 3rd/8th/13th/18th/23rd/28th runs
-`run_update.sh`, logging to `data/cron.log`.
+end-of-month; ZRA Kariba and CHIRPS-GEFS update daily; weekly Niño weekly.
+Cron (installed): **daily 07:30** runs `run_update.sh`, logging to
+`data/cron.log` (CHIRPS granules between updates are skipped as already
+ingested, so off-dekad days are cheap).
 
 ## API notes (reverse-engineered from the EWX viewer, Aug 2026)
 
