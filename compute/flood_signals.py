@@ -374,38 +374,41 @@ def fetch_gefs(con, basins: list) -> None:
 
 NTFY_TOPIC_FILE = pathlib.Path(__file__).resolve().parent.parent / \
     "data" / "ntfy_topic.txt"
-# email alerting: opt-in via a gitignored JSON config —
-#   {"smtp_host": "smtp.gmail.com", "smtp_port": 587,
-#    "smtp_user": "you@gmail.com", "smtp_pass": "<app password>",
-#    "to": "you@gmail.com"}
-# For Gmail create an App Password (Google Account -> Security -> 2-Step
-# Verification -> App passwords); the normal account password won't work.
-EMAIL_CONF_FILE = NTFY_TOPIC_FILE.parent / "alert_email.json"
+# email alerting via the Migadu sender (mini contract: email leaves
+# only as minibot@remote-brain.com over smtp.migadu.com:465, password in
+# the Keychain — service MIGADU_SMTP — never Apple Mail, never Gmail).
+# Deterministic sender + fixed recipient allowlist; no secrets in files.
+SMTP_HOST, SMTP_PORT = "smtp.migadu.com", 465
+SMTP_SENDER = "minibot@remote-brain.com"
+ALERT_RECIPIENTS = ["thaddeus.best@gmail.com"]
 
 
 def _email(subject: str, body: str) -> None:
-    """Send an alert email if data/alert_email.json exists (opt-in,
-    gitignored). Failures are non-fatal — alerting must never kill the
-    run."""
-    if not EMAIL_CONF_FILE.exists():
+    """Send an alert email as the Migadu sender. Opt-in by presence of
+    the MIGADU_SMTP Keychain item (or MIGADU_SMTP_PASSWORD env for dev);
+    missing item = skip, any failure non-fatal — alerting must never
+    kill the run."""
+    from secrets_helper import secret  # ingest/secrets_helper.py
+    try:
+        password = secret("MIGADU_SMTP", account=SMTP_SENDER,
+                          env="MIGADU_SMTP_PASSWORD")
+    except Exception:  # noqa: BLE001 — no Keychain item: alerting is off
+        print("alert email skipped: no MIGADU_SMTP Keychain item "
+              f"for {SMTP_SENDER} (and no MIGADU_SMTP_PASSWORD env)",
+              file=sys.stderr)
         return
     try:
-        import json
         import smtplib
         from email.message import EmailMessage
-        conf = json.loads(EMAIL_CONF_FILE.read_text())
         msg = EmailMessage()
         msg["Subject"] = subject
-        msg["From"] = conf["smtp_user"]
-        msg["To"] = conf["to"]
+        msg["From"] = SMTP_SENDER
+        msg["To"] = ", ".join(ALERT_RECIPIENTS)
         msg.set_content(body)
-        with smtplib.SMTP(conf["smtp_host"],
-                          int(conf.get("smtp_port", 587)),
-                          timeout=60) as s:
-            s.starttls()
-            s.login(conf["smtp_user"], conf["smtp_pass"])
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=60) as s:
+            s.login(SMTP_SENDER, password)
             s.send_message(msg)
-        print(f"alert email sent to {conf['to']}")
+        print(f"alert email sent to {', '.join(ALERT_RECIPIENTS)}")
     except Exception as e:  # noqa: BLE001
         print(f"alert email failed (non-fatal): {e}", file=sys.stderr)
 
