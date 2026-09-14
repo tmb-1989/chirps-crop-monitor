@@ -106,11 +106,20 @@ def process(names, dir_url, dataset, masks, con, skip_existing=True) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--full", action="store_true")
+    ap.add_argument("--since-year", type=int, default=None,
+                    help="backfill from this year instead of 1981 or the "
+                    "default 2-year incremental window — e.g. 1995 to keep "
+                    "a new zone's backfill under ~500 files' worth of "
+                    "history without a full 1981 re-stream")
     args = ap.parse_args()
 
     finals = cr.list_remote(FINAL_DIR)
     prelims = cr.list_remote(PRELIM_DIR)
-    if not args.full:
+    if args.since_year is not None:
+        cutoff = f"chirps-v3.0.{args.since_year}"
+        finals = [n for n in finals if n >= cutoff]
+        prelims = [n for n in prelims if n >= cutoff]
+    elif not args.full:
         cutoff = f"chirps-v3.0.{dt.date.today().year - 2}"
         finals = [n for n in finals if n >= cutoff]
         prelims = [n for n in prelims if n >= cutoff]

@@ -92,7 +92,8 @@ tracking as bad as the worst of those events.
 """)
 
 today = dt.date.today()
-view = st.sidebar.radio("View", ["Overview", "Zone detail", "Flood watch"])
+view = st.sidebar.radio(
+    "View", ["Overview", "Zone detail", "Flood watch", "DRC hydro"])
 
 # ======================== OVERVIEW ========================================
 # one representative zone per country, its main season
@@ -523,6 +524,188 @@ if view == "Flood watch":
         "fire much more often and are best read alongside the rest of the "
         "chart. The gray band shows the rainfall forecast for the next "
         "10 days.")
+    st.stop()
+
+# ======================== DRC HYDRO ========================================
+if view == "DRC hydro":
+    import sys as _sys
+    _sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent
+                            / "compute"))
+    import hydro_levels as hydro  # noqa: E402
+
+    st.subheader("DRC hydro — Katanga cascade + Inga etiage "
+                 "(SCOPING-DRC-HYDRO.md, display-only)")
+    st.caption(
+        "Satellite altimetry (DAHITI/DGFI-TUM) on three water bodies that "
+        "constrain the DRC copper/cobalt belt's power supply, plus "
+        "rainfall over the two Katanga-highlands catchments that feed the "
+        "reservoir-hydro cascade. No outcome data (generation GWh, plant "
+        "status) or alerting yet — see the limitations note below.")
+
+    STATIONS = [
+        ("inga_congo", "Congo at Inga (6km from dam) — etiage monitor"),
+        ("nzilo_reservoir", "Nzilo Reservoir / Lac Delcommune — Lualaba "
+                            "cascade storage"),
+        ("lufira_tshangalele", "Lufira below Tshangalele — Mwadingusha "
+                               "outflow proxy"),
+    ]
+    con = sqlite3.connect(DB)
+    level_cols = st.columns(3)
+    for col, (station_key, label) in zip(level_cols, STATIONS):
+        df = hydro.load_levels(con, station_key)
+        with col:
+            if df.empty:
+                st.warning(f"{label}: no data — run "
+                           "ingest/dahiti_levels.py.")
+                continue
+            band = hydro.latest_vs_band(df)
+            clim = hydro.monthly_climatology(df)
+            # per-observation band following the month it falls in, so the
+            # +/-1 sigma ribbon is plotted against the actual date axis
+            m = df["date"].dt.month.map(clim.set_index("month")["mean"])
+            s = df["date"].dt.month.map(clim.set_index("month")["std"])
+            f = go.Figure()
+            f.add_scatter(x=df["date"], y=m + s, line=dict(width=0),
+                         showlegend=False, hoverinfo="skip")
+            f.add_scatter(x=df["date"], y=m - s, fill="tonexty",
+                         fillcolor="rgba(120,120,120,0.2)", line=dict(width=0),
+                         name="+/-1 sigma (same-month climatology)")
+            f.add_scatter(x=df["date"], y=m, line=dict(color="gray",
+                         dash="dash"), name="calendar-month mean")
+            f.add_scatter(x=df["date"], y=df["level_m"],
+                         line=dict(color="steelblue", width=2),
+                         name="level (m)")
+            f.add_scatter(x=[band["date"]], y=[band["level_m"]],
+                         mode="markers",
+                         marker=dict(size=11, color="crimson",
+                                    symbol="circle"),
+                         name="latest")
+            f.update_layout(title=label, height=340,
+                            margin=dict(t=40, b=10),
+                            showlegend=False, yaxis_title="m")
+            st.plotly_chart(f, use_container_width=True)
+            z = band.get("z")
+            st.caption(
+                f"Latest {band['date'].date()}: {band['level_m']:.2f}m "
+                f"vs {band.get('clim_mean', float('nan')):.2f}m "
+                f"same-month mean (n={band.get('clim_n', 0)} yrs)"
+                + (f", z={z:+.2f}" if z is not None else "")
+                + f" — {len(df)} obs, {df['date'].min().date()} onward.")
+            if station_key == "inga_congo":
+                e = hydro.etiage_percentile(df)
+                if e.get("percentile") is not None:
+                    st.metric(
+                        "low-water percentile (display only — "
+                        "uncalibrated)",
+                        f"{e['percentile']:.0f}th",
+                        help=f"Latest reading's rank among {e['n']} "
+                             "historical observations within +/-15 days "
+                             "of the same day-of-year. Lower = drier than "
+                             "usual for this time of year. Not a "
+                             "calibrated alert threshold — see the "
+                             "limitations note.")
+    con.close()
+
+    st.markdown("---")
+    st.subheader("Zone rainfall — Katanga highlands catchments")
+
+    def drc_season_frame(zk: str):
+        """Season-cumulative pentad rainfall vs climatology, wet season
+        (Nov-Apr) per SCOPING-DRC-HYDRO.md. Reuses the flood-basin local
+        CHIRPS v3 pentad pipeline (chirps3local_pentad_data(+prelim)) —
+        these catchments are registered in basins.geojson alongside the
+        Kenya flood basins (least new code: the pentad mask/backfill
+        machinery in flood_raster.py already exists and needed no change
+        beyond adding the two DRC polygons)."""
+        df = load(
+            "SELECT granule_start, value, dataset FROM observations WHERE "
+            "zone_key=? AND dataset IN ('chirps3local_pentad_data',"
+            "'chirps3local-prelim_pentad_data') ORDER BY granule_start",
+            (zk,))
+        if df.empty:
+            return None, None, None
+        df["src"] = np.where(df.dataset.str.contains("prelim"), "prelim",
+                             "final")
+        df = (df.sort_values("src")
+              .drop_duplicates("granule_start", keep="first"))
+        ts = pd.to_datetime(df.granule_start)
+        df["month"], df["day"] = ts.dt.month, ts.dt.day
+        s_start, s_end = 11, 4  # wet season, cross-year
+        df = df[[(m >= s_start or m <= s_end) for m in df["month"]]].copy()
+        df["syear"] = [t.year if m >= s_start else t.year - 1
+                       for t, m in zip(ts[df.index], df["month"])]
+        df["doy_key"] = [f"{(m - s_start) % 12:02d}-{d:02d}"
+                         for m, d in zip(df["month"], df["day"])]
+        df = df.sort_values(["syear", "doy_key"])
+        df["cum"] = df.groupby("syear")["value"].cumsum()
+        clim = (df[df.syear >= df.syear.min()]
+                .groupby("doy_key")["cum"]
+                .agg(mean="mean", p20=lambda s: s.quantile(0.2),
+                     p80=lambda s: s.quantile(0.8)).reset_index())
+        cur_sy = today.year if today.month >= s_start else today.year - 1
+        return df, clim, cur_sy
+
+    ZONE_LABEL = {"drc_lualaba_hydro": "Upper Lualaba (above Nzilo dam)",
+                 "drc_lufira_hydro": "Upper Lufira (above Mwadingusha/"
+                                     "Tshangalele dam)"}
+    rcols = st.columns(2)
+    for col, zk in zip(rcols, ZONE_LABEL):
+        df, clim, cur_sy = drc_season_frame(zk)
+        with col:
+            if df is None:
+                st.warning(f"{ZONE_LABEL[zk]}: no rainfall data yet — "
+                           "backfill may still be running "
+                           "(ingest/flood_raster.py).")
+                continue
+            cur = df[df.syear == cur_sy]
+            f = go.Figure()
+            f.add_scatter(x=clim.doy_key, y=clim.p80, line=dict(width=0),
+                         showlegend=False, hoverinfo="skip")
+            f.add_scatter(x=clim.doy_key, y=clim.p20, fill="tonexty",
+                         fillcolor="rgba(120,120,120,0.2)",
+                         line=dict(width=0), name="20-80th pct")
+            f.add_scatter(x=clim.doy_key, y=clim["mean"],
+                         line=dict(color="gray", dash="dash"), name="mean")
+            if not cur.empty:
+                f.add_scatter(x=cur.doy_key, y=cur.cum,
+                             line=dict(color="crimson", width=3),
+                             name=f"{cur_sy}-{str(cur_sy + 1)[2:]}")
+            f.update_layout(title=f"{ZONE_LABEL[zk]} — cumulative rainfall, "
+                                  f"wet season (Nov-Apr)",
+                            height=360, margin=dict(t=40, b=10),
+                            yaxis_title="mm")
+            st.plotly_chart(f, use_container_width=True)
+            if not cur.empty:
+                last = cur.iloc[-1]
+                merged = clim[clim.doy_key <= last.doy_key]
+                pct = (100 * last.cum / merged["mean"].iloc[-1]
+                      if not merged.empty and merged["mean"].iloc[-1] > 0
+                      else float("nan"))
+                st.caption(f"{cur_sy}-{str(cur_sy + 1)[2:]} season to date: "
+                          f"{last.cum:.0f}mm ({pct:.0f}% of climatology "
+                          f"mean, n={df.syear.nunique()} seasons of "
+                          "history — backfilled from 1995, not the full "
+                          "1981 record, to keep the CHIRPS v3 pentad "
+                          "re-stream under ~500 files per the CHC "
+                          "CrowdSec rate limit).")
+
+    st.markdown("---")
+    st.info(
+        "**Limitations.** This layer watches hydrology only. It does NOT "
+        "cover: turbine/unit mechanical availability (outages, "
+        "refurbishments — e.g. the Inga II turbine program or the "
+        "Mwadingusha/Koni rehabilitation are not reflected here), "
+        "transmission constraints, or actual generation (GWh) — those are "
+        "D2 scope (BCC Tableau I.6 power data, a unit-status register "
+        "sourced from Ivanhoe/Glencore disclosures). Kolwezi/Likasi also "
+        "import power from Zambia (CEC / Kalumbila-Kolwezi contracts) — "
+        "that Zambian supply side is tracked in the sister "
+        "elnino-hydro-dashboard project, not duplicated here. The Inga "
+        "low-water percentile is descriptive only: there is no calibrated "
+        "watch/alert threshold until a documented catalog of SNEL "
+        "curtailment episodes exists to check candidate thresholds "
+        "against. Busanga (240MW, Sicomines) has no public altimetry or "
+        "output data and is not represented at all.")
     st.stop()
 
 # ======================== ZONE DETAIL =====================================

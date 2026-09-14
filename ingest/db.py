@@ -41,6 +41,15 @@ CREATE TABLE IF NOT EXISTS revisions (
     new_value     REAL NOT NULL,
     revised_at    TEXT NOT NULL
 );
+-- DAHITI satellite-altimetry water levels (SCOPING-DRC-HYDRO.md D1).
+CREATE TABLE IF NOT EXISTS hydro_levels (
+    station_key TEXT NOT NULL,
+    date        TEXT NOT NULL,
+    level_m     REAL NOT NULL,
+    error_m     REAL,
+    fetched_at  TEXT NOT NULL,
+    PRIMARY KEY (station_key, date)
+);
 """
 
 
@@ -64,6 +73,22 @@ def upsert_dataset_meta(con, ends: dict):
     for dataset, end in ends.items():
         con.execute("INSERT OR REPLACE INTO dataset_meta VALUES (?,?,?)",
                     (dataset, end, now))
+
+
+def upsert_hydro_levels(con, station_key: str, rows) -> int:
+    """Insert/refresh DAHITI level rows [(date_iso, level_m, error_m), ...]."""
+    now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    new = 0
+    for date, level_m, error_m in rows:
+        cur = con.execute(
+            "SELECT 1 FROM hydro_levels WHERE station_key=? AND date=?",
+            (station_key, date))
+        if cur.fetchone() is None:
+            new += 1
+        con.execute(
+            "INSERT OR REPLACE INTO hydro_levels VALUES (?,?,?,?,?)",
+            (station_key, date, level_m, error_m, now))
+    return new
 
 
 def upsert_observations(con, zone_key: str, dataset: str, rows) -> int:
