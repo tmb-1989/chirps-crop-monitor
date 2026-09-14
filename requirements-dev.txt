@@ -4,3 +4,5 @@ requests
 scipy
 rasterio
 shapely>=2
+beautifulsoup4
+pyshp

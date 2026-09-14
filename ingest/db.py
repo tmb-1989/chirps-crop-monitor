@@ -50,12 +50,24 @@ CREATE TABLE IF NOT EXISTS hydro_levels (
     fetched_at  TEXT NOT NULL,
     PRIMARY KEY (station_key, date)
 );
+-- Kariba (ZRA) level + turbine discharge, seeded from the elnino
+-- dashboard's reconstructed 2017- series then continued by the live ZRA
+-- scraper (SCOPING-MOZ-HYDRO.md M1). Live rows win on conflict with seed
+-- rows for the same date (see upsert_kariba_flows).
+CREATE TABLE IF NOT EXISTS kariba_flows (
+    date        TEXT NOT NULL PRIMARY KEY,
+    level_m     REAL,
+    turbine_m3s REAL,
+    source      TEXT NOT NULL,   -- 'seed' | 'zra_live'
+    fetched_at  TEXT NOT NULL
+);
 """
 
 
 def connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    con.execute("PRAGMA busy_timeout=30000")
     con.executescript(SCHEMA)
     return con
 
@@ -88,6 +100,29 @@ def upsert_hydro_levels(con, station_key: str, rows) -> int:
         con.execute(
             "INSERT OR REPLACE INTO hydro_levels VALUES (?,?,?,?,?)",
             (station_key, date, level_m, error_m, now))
+    return new
+
+
+def upsert_kariba_flows(con, rows, source: str) -> int:
+    """Insert/refresh kariba_flows rows [(date_iso, level_m, turbine_m3s), ...].
+
+    'zra_live' rows always win; a 'seed' row is only written if no row
+    (of either source) already exists for that date — so re-running the
+    one-time seed never clobbers live data, and the live scraper always
+    supersedes the seed's reconstructed history."""
+    now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    new = 0
+    for date, level_m, turbine_m3s in rows:
+        cur = con.execute(
+            "SELECT source FROM kariba_flows WHERE date=?", (date,))
+        hit = cur.fetchone()
+        if hit is None:
+            new += 1
+        elif source == "seed" and hit[0] == "zra_live":
+            continue  # live already has this date — never overwrite it
+        con.execute(
+            "INSERT OR REPLACE INTO kariba_flows VALUES (?,?,?,?,?)",
+            (date, level_m, turbine_m3s, source, now))
     return new
 
 

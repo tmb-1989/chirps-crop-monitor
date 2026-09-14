@@ -93,7 +93,8 @@ tracking as bad as the worst of those events.
 
 today = dt.date.today()
 view = st.sidebar.radio(
-    "View", ["Overview", "Zone detail", "Flood watch", "DRC hydro"])
+    "View", ["Overview", "Zone detail", "Flood watch", "DRC hydro",
+             "Mozambique hydro"])
 
 # ======================== OVERVIEW ========================================
 # one representative zone per country, its main season
@@ -706,6 +707,233 @@ if view == "DRC hydro":
         "curtailment episodes exists to check candidate thresholds "
         "against. Busanga (240MW, Sicomines) has no public altimetry or "
         "output data and is not represented at all.")
+    st.stop()
+
+# ======================== MOZAMBIQUE HYDRO =================================
+if view == "Mozambique hydro":
+    import sys as _sys
+    _sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent
+                            / "compute"))
+    import hydro_levels as hydro  # noqa: E402
+
+    st.subheader("Mozambique hydro — Cahora Bassa + inflows "
+                 "(SCOPING-MOZ-HYDRO.md, display-only)")
+    st.caption(
+        "Cahora Bassa is Mozambique's power-sector export earner and the "
+        "flood valve for the lower Zambezi. This view tracks the "
+        "reservoir itself plus its two observable inflow drivers — "
+        "Kariba turbine releases (days-to-weeks lag) and Luangwa "
+        "rainfall (the great unregulated tributary, joining at Zumbo) — "
+        "and the smaller Chicamba–Mavuzi cascade (Revué river, Beira "
+        "corridor). No outcome data (generation, exports) or alerting — "
+        "see the limitations note below.")
+
+    con = sqlite3.connect(DB)
+    cahora = hydro.load_levels(con, "cahora_bassa")
+    if cahora.empty:
+        st.warning("Cahora Bassa: no data — run ingest/dahiti_levels.py.")
+    else:
+        band = hydro.latest_vs_band(cahora)
+        clim = hydro.monthly_climatology(cahora)
+        m = cahora["date"].dt.month.map(clim.set_index("month")["mean"])
+        s = cahora["date"].dt.month.map(clim.set_index("month")["std"])
+        f = go.Figure()
+        f.add_scatter(x=cahora["date"], y=m + s, line=dict(width=0),
+                     showlegend=False, hoverinfo="skip")
+        f.add_scatter(x=cahora["date"], y=m - s, fill="tonexty",
+                     fillcolor="rgba(120,120,120,0.2)", line=dict(width=0),
+                     name="+/-1 sigma (same-month climatology)")
+        f.add_scatter(x=cahora["date"], y=m, line=dict(color="gray",
+                     dash="dash"), name="calendar-month mean")
+        f.add_scatter(x=cahora["date"], y=cahora["level_m"],
+                     line=dict(color="steelblue", width=2), name="level (m)")
+        f.add_scatter(x=[band["date"]], y=[band["level_m"]], mode="markers",
+                     marker=dict(size=11, color="crimson", symbol="circle"),
+                     name="latest")
+        f.update_layout(title="Cahora Bassa reservoir level", height=380,
+                        margin=dict(t=40, b=10), showlegend=False,
+                        yaxis_title="m")
+        st.plotly_chart(f, use_container_width=True)
+        z = band.get("z")
+        st.caption(
+            f"Latest {band['date'].date()}: {band['level_m']:.2f}m vs "
+            f"{band.get('clim_mean', float('nan')):.2f}m same-month mean "
+            f"(n={band.get('clim_n', 0)} yrs)"
+            + (f", z={z:+.2f}" if z is not None else "")
+            + f" — {len(cahora)} obs, {cahora['date'].min().date()} "
+              "onward.")
+        e = hydro.etiage_percentile(cahora)
+        if e.get("percentile") is not None:
+            st.metric(
+                "day-of-year percentile (display only — uncalibrated)",
+                f"{e['percentile']:.0f}th",
+                help=f"Latest reading's rank among {e['n']} historical "
+                     "observations within +/-15 days of the same "
+                     "day-of-year. Lower = drier/lower than usual for "
+                     "this time of year. No FSL/MOL operating-band lines "
+                     "are drawn until verified against HCB's own "
+                     "disclosures — see the limitations note.")
+
+    st.markdown("---")
+    st.subheader("Inflow panel — Kariba releases + Luangwa rainfall")
+    inflow_cols = st.columns(2)
+
+    with inflow_cols[0]:
+        kdf = pd.read_sql_query(
+            "SELECT date, turbine_m3s FROM kariba_flows "
+            "WHERE turbine_m3s IS NOT NULL ORDER BY date", con)
+        if kdf.empty:
+            st.warning("Kariba discharge: no data — run "
+                       "ingest/zra_kariba.py (--seed first).")
+        else:
+            kdf["date"] = pd.to_datetime(kdf["date"])
+            kdf["roll30"] = kdf["turbine_m3s"].rolling(30, min_periods=5).mean()
+            recent = kdf[kdf["date"] >= kdf["date"].max() - pd.Timedelta(days=730)]
+            fk = go.Figure()
+            fk.add_scatter(x=recent["date"], y=recent["turbine_m3s"],
+                          line=dict(color="lightsteelblue", width=1),
+                          name="daily", opacity=0.5)
+            fk.add_scatter(x=recent["date"], y=recent["roll30"],
+                          line=dict(color="steelblue", width=2.5),
+                          name="30d mean")
+            fk.update_layout(title="Kariba turbine discharge (ZRA)",
+                            height=320, margin=dict(t=40, b=10),
+                            yaxis_title="m3/s")
+            st.plotly_chart(fk, use_container_width=True)
+            last30 = kdf.tail(30)
+            st.caption(
+                f"30-day mean turbine discharge: "
+                f"{last30['turbine_m3s'].mean():.0f} m3/s "
+                f"(series {kdf['date'].min().date()} - "
+                f"{kdf['date'].max().date()}, {len(kdf)} obs; source "
+                "series has gaps inherited from the ZRA reservoir-data "
+                "page's own reconstructed history, not a live outage).")
+
+    with inflow_cols[1]:
+        ldf = load(
+            "SELECT granule_start, value, dataset FROM observations WHERE "
+            "zone_key='zmb_luangwa_basin' AND dataset IN "
+            "('chirps3local_pentad_data','chirps3local-prelim_pentad_data') "
+            "ORDER BY granule_start")
+        if ldf.empty:
+            st.info(
+                "Luangwa wet-season rainfall: **backfill pending.** The "
+                "zone (zmb_luangwa_basin, 149,540 km2, matches the "
+                "published ~144,000 km2 Luangwa basin area within the "
+                "walk-validation tolerance) is registered and its mask "
+                "is built, but the CHIRPS v3 pentad history has not been "
+                "backfilled yet — the DRC hydro layer's own backfill "
+                "(flood_raster.py --since-year 1995) had exclusive use "
+                "of the CHC download slot at build time. The next "
+                "flood_raster.py run will pick this zone up "
+                "automatically once that finishes.")
+        else:
+            ldf["src"] = np.where(ldf.dataset.str.contains("prelim"),
+                                  "prelim", "final")
+            ldf = (ldf.sort_values("src")
+                   .drop_duplicates("granule_start", keep="first"))
+            ts = pd.to_datetime(ldf.granule_start)
+            ldf["month"], ldf["day"] = ts.dt.month, ts.dt.day
+            s_start, s_end = 11, 4  # wet season, per SCOPING-MOZ-HYDRO.md
+            ldf = ldf[[(mo >= s_start or mo <= s_end)
+                      for mo in ldf["month"]]].copy()
+            ldf["syear"] = [t.year if mo >= s_start else t.year - 1
+                            for t, mo in zip(ts[ldf.index], ldf["month"])]
+            ldf["doy_key"] = [f"{(mo - s_start) % 12:02d}-{d:02d}"
+                              for mo, d in zip(ldf["month"], ldf["day"])]
+            ldf = ldf.sort_values(["syear", "doy_key"])
+            ldf["cum"] = ldf.groupby("syear")["value"].cumsum()
+            clim_l = (ldf.groupby("doy_key")["cum"]
+                      .agg(mean="mean", p20=lambda s: s.quantile(0.2),
+                           p80=lambda s: s.quantile(0.8)).reset_index())
+            cur_sy = today.year if today.month >= s_start else today.year - 1
+            cur = ldf[ldf.syear == cur_sy]
+            fl = go.Figure()
+            fl.add_scatter(x=clim_l.doy_key, y=clim_l.p80, line=dict(width=0),
+                          showlegend=False, hoverinfo="skip")
+            fl.add_scatter(x=clim_l.doy_key, y=clim_l.p20, fill="tonexty",
+                          fillcolor="rgba(120,120,120,0.2)",
+                          line=dict(width=0), name="20-80th pct")
+            fl.add_scatter(x=clim_l.doy_key, y=clim_l["mean"],
+                          line=dict(color="gray", dash="dash"), name="mean")
+            if not cur.empty:
+                fl.add_scatter(x=cur.doy_key, y=cur.cum,
+                              line=dict(color="crimson", width=3),
+                              name=f"{cur_sy}-{str(cur_sy + 1)[2:]}")
+            fl.update_layout(title="Luangwa basin — cumulative rainfall, "
+                                   "wet season (Nov-Apr)",
+                            height=320, margin=dict(t=40, b=10),
+                            yaxis_title="mm")
+            st.plotly_chart(fl, use_container_width=True)
+            st.caption(f"n={ldf.syear.nunique()} season(s) of history "
+                      "(backfilled from 1995).")
+
+    st.markdown("---")
+    st.subheader("Chicamba reservoir")
+    chic = hydro.load_levels(con, "chicamba_reservoir")
+    if chic.empty:
+        st.warning("Chicamba: no data — run ingest/dahiti_levels.py.")
+    else:
+        thin = len(chic) < 30 or (chic["level_m"].max()
+                                  - chic["level_m"].min()) < 0.5
+        band_c = hydro.latest_vs_band(chic)
+        clim_c = hydro.monthly_climatology(chic)
+        mc = chic["date"].dt.month.map(clim_c.set_index("month")["mean"])
+        sc = chic["date"].dt.month.map(clim_c.set_index("month")["std"])
+        fc = go.Figure()
+        fc.add_scatter(x=chic["date"], y=mc + sc, line=dict(width=0),
+                      showlegend=False, hoverinfo="skip")
+        fc.add_scatter(x=chic["date"], y=mc - sc, fill="tonexty",
+                      fillcolor="rgba(120,120,120,0.2)", line=dict(width=0),
+                      name="+/-1 sigma (same-month climatology)")
+        fc.add_scatter(x=chic["date"], y=mc, line=dict(color="gray",
+                      dash="dash"), name="calendar-month mean")
+        fc.add_scatter(x=chic["date"], y=chic["level_m"],
+                      line=dict(color="seagreen", width=2), name="level (m)")
+        fc.add_scatter(x=[band_c["date"]], y=[band_c["level_m"]],
+                      mode="markers",
+                      marker=dict(size=11, color="crimson", symbol="circle"),
+                      name="latest")
+        title = "Chicamba reservoir level" + (" [THIN SERIES]" if thin else "")
+        fc.update_layout(title=title, height=320, margin=dict(t=40, b=10),
+                        showlegend=False, yaxis_title="m")
+        st.plotly_chart(fc, use_container_width=True)
+        if thin:
+            st.caption(
+                f"**Thin series** — {len(chic)} obs, "
+                f"{chic['level_m'].max() - chic['level_m'].min():.2f}m "
+                "range. Stored and shown per the build spec, but treat "
+                "with caution until more history accrues.")
+        else:
+            zc = band_c.get("z")
+            st.caption(
+                f"Latest {band_c['date'].date()}: {band_c['level_m']:.2f}m "
+                f"vs {band_c.get('clim_mean', float('nan')):.2f}m "
+                f"same-month mean (n={band_c.get('clim_n', 0)} yrs)"
+                + (f", z={zc:+.2f}" if zc is not None else "")
+                + f" — {len(chic)} obs, {chic['date'].min().date()} "
+                  "onward, not thin (>=30 obs, "
+                  f"{chic['level_m'].max() - chic['level_m'].min():.1f}m "
+                  "range).")
+    con.close()
+
+    st.markdown("---")
+    st.info(
+        "**Limitations.** This layer watches hydrology only. The "
+        "Songo-Apollo HVDC export line (the 1,400MW artery to South "
+        "Africa/Eskom) and EDM's non-hydro (gas) fleet are mechanical/"
+        "contractual and are NOT observed here — a high or low reservoir "
+        "reading says nothing about whether power is actually being "
+        "exported. Southern Mozambique imports power from Eskom "
+        "(south-region loop), which this layer does not cover either. "
+        "No fixed operating-band lines (FSL/minimum operating level) are "
+        "drawn — the widely cited ~326m/~295m figures are deferred until "
+        "verified against HCB's own semi-annual disclosures (D2 scope); "
+        "the bands shown are purely empirical (same-month climatology, "
+        "day-of-year percentile), not calibrated thresholds. Kariba "
+        "discharge is a same scrape the sister elnino-hydro-dashboard "
+        "project already runs — duplicated here so this monitor stays "
+        "self-contained on the mini, per the build's contract amendment.")
     st.stop()
 
 # ======================== ZONE DETAIL =====================================

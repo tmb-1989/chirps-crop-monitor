@@ -1,9 +1,12 @@
-"""DAHITI (DGFI-TUM) satellite-altimetry water levels — DRC hydro layer.
+"""DAHITI (DGFI-TUM) satellite-altimetry water levels — hydro layers.
 
 SCOPING-DRC-HYDRO.md D1: three curated stations for the Katanga cascade +
-Inga etiage monitor. Ported from elnino-hydro-dashboard/ingest/dahiti.py
-(v2 API: POST https://dahiti.dgfi.tum.de/api/v2/<action>/ with api_key
-as a form field; response fields are wse/wse_u, not water_level).
+Inga etiage monitor. SCOPING-MOZ-HYDRO.md M1 adds three more: Cahora
+Bassa, Chicamba reservoir, and ITT tailwater (Kafue outflow proxy,
+already curated in the elnino dashboard). Ported from
+elnino-hydro-dashboard/ingest/dahiti.py (v2 API: POST
+https://dahiti.dgfi.tum.de/api/v2/<action>/ with api_key as a form
+field; response fields are wse/wse_u, not water_level).
 
 Requires a free API key: register at https://dahiti.dgfi.tum.de/en/, then
 set DAHITI_API_KEY in the environment or in a `.env` file at the repo root
@@ -41,6 +44,14 @@ STATIONS = {
                                     # no DAHITI target on Lake Tshangalele
                                     # itself — verified against all 1,059
                                     # DRC entries, see scoping doc)
+    # SCOPING-MOZ-HYDRO.md M1 (Cahora Bassa layer):
+    "cahora_bassa": 209,            # Cahora Bassa reservoir level
+    "chicamba_reservoir": 40103,    # Chicamba reservoir (-19.13, 33.11),
+                                     # unverified obs count at build time —
+                                     # report whatever the API returns
+    "itt_tailwater": 38838,         # ITT tailwater — Kafue outflow proxy
+                                     # into the lower Zambezi/Cahora system,
+                                     # already curated in the elnino dash
 }
 
 
