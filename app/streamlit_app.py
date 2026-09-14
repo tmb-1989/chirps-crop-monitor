@@ -627,8 +627,13 @@ if view == "Flood watch":
                           "data" / "zones" / "basins.geojson").read())
     props = {f["properties"]["zone_key"]: f["properties"]
              for f in gj["features"]}
+    # basins.geojson is a shared, multi-producer file (also holds the
+    # DRC/Zambia hydro-catchment zones from ingest/hydro_zones.py, iso3
+    # COD/ZMB) — restrict to the flood-alert countries in COUNTRY so a
+    # hydro-only iso3 doesn't blow up the fixed sort order below.
     iso3 = st.sidebar.selectbox(
-        "Country", sorted({p["iso3"] for p in props.values()},
+        "Country", sorted({p["iso3"] for p in props.values()
+                           if p["iso3"] in COUNTRY},
                           key=list(COUNTRY).index),
         format_func=COUNTRY.get)
     czones = [zk for zk, p in sorted(props.items()) if p["iso3"] == iso3]
