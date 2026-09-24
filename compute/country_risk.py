@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS live.zone_risk (
     sm       REAL,
     as_of    TEXT,
     computed_at TEXT,
+    season   TEXT,
     PRIMARY KEY (zone_key, factor)
 );
 """
@@ -130,16 +131,22 @@ def _age(date_str: str | None, today: dt.date) -> int:
     return (today - dt.date.fromisoformat(date_str[:10])).days
 
 
-def in_season(seasons: str | None, month: int) -> bool:
-    """True if `month` falls in any of the zone's season windows
-    ('belg:2-5,kiremt:6-9'; cross-year like 'main:10-4' supported)."""
+def season_of(seasons: str | None, month: int) -> str | None:
+    """Name of the season window containing `month`, or None
+    ('belg:2-5,kiremt:6-9'; cross-year like 'main:10-4' supported).
+    V2.5: bimodal zones report which season a reading belongs to."""
     for tok in (seasons or "").split(","):
         if not tok:
             continue
-        a, b = map(int, tok.split(":")[1].split("-"))
+        name, ab = tok.split(":")
+        a, b = map(int, ab.split("-"))
         if (a <= month <= b) if a <= b else (month >= a or month <= b):
-            return True
-    return False
+            return name.replace("_", " ")
+    return None
+
+
+def in_season(seasons: str | None, month: int) -> bool:
+    return season_of(seasons, month) is not None
 
 
 # ---------------------------------------------------------------- factors
@@ -340,8 +347,10 @@ def drought_zones(con, today: dt.date) -> pd.DataFrame:
         sp = spi[spi.zone_key == z.zone_key]
         s3 = sp.spi3.iloc[0] if not sp.empty else None
         s3_d = sp.granule_start.iloc[0] if not sp.empty else None
+        wr_season = None if wr_d is None else \
+            season_of(z.seasons, dt.date.fromisoformat(wr_d).month)
         wr_ok = _age(wr_d, today) <= STALE["wrsi"] and wr is not None \
-            and in_season(z.seasons, dt.date.fromisoformat(wr_d).month)
+            and wr_season is not None
         sm_ok = sm is not None and _age(sm_d, today) <= STALE["sm"]
         s3_ok = s3 is not None and _age(s3_d, today) <= STALE["spi"]
         status, why = "green", "no stress"
@@ -364,6 +373,7 @@ def drought_zones(con, today: dt.date) -> pd.DataFrame:
             "wrsi": wr if wr is not None else None,
             "wrsi_in_season": int(bool(wr_ok)),
             "spi3": s3, "sm": sm,
+            "season": wr_season if wr_ok else None,
             "as_of": wr_d if wr_ok else (s3_d or sm_d or wr_d),
             # severity for the country rollup: worse status first, then
             # lower in-season WRSI, then lower SPI-3
@@ -457,10 +467,14 @@ def main() -> int:
                "flood": flood_status(con, today),
                "hydro": hydro_status(con, today)}
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    if "season" not in [r[1] for r in con.execute(
+            "SELECT * FROM pragma_table_info('zone_risk', 'live')")]:
+        con.execute("ALTER TABLE live.zone_risk ADD COLUMN season TEXT")
     con.executemany(
-        "INSERT OR REPLACE INTO zone_risk VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT OR REPLACE INTO zone_risk VALUES "
+        "(?,?,?,?,?,?,?,?,?,?,?,?,?)",
         [(r.zone_key, "drought", r.country, r["name"], r.status, r.reason,
-          r.wrsi, r.wrsi_in_season, r.spi3, r.sm, r.as_of, now)
+          r.wrsi, r.wrsi_in_season, r.spi3, r.sm, r.as_of, now, r.season)
          for _, r in zr.iterrows()])
     prev = {(r[0], r[1]): r[2] for r in con.execute(
         "SELECT country, factor, status FROM country_risk")}

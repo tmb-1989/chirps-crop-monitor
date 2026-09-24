@@ -166,9 +166,11 @@ def drought_region_block(expander: bool = True) -> None:
                           + (" ·prov" if s.provisional else ""))
                 os_fill = FILL["red"] if s.shock >= 0.4 else \
                     FILL["yellow"] if s.shock >= 0.2 else FILL["green"]
+            season = getattr(z, "season", None)
             drows.append({
                 "Country": NAMES_CR.get(z.country, z.country),
-                "Region": f"{DOT[z.status]} {z['name']}",
+                "Region": f"{DOT[z.status]} {z['name']}"
+                          + (f" · {season}" if season else ""),
                 "WRSI %med": wr_txt, "SPI-3": sp_txt,
                 "Soil moisture": sm_txt, "Output shock": os_txt,
                 "Driver": z.reason})

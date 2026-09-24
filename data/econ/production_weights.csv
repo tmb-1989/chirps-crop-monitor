@@ -1,21 +1,59 @@
 zone_key,iso3,commodity,share_national,note
-ken_uasin_gishu,KEN,Maize,0.10,"Uasin Gishu ~8-12% of national maize (KNBS county stats); v1 estimate"
-ken_trans_nzoia,KEN,Maize,0.12,"Trans Nzoia ~10-14% of national maize; v1 estimate"
-eth_arsi,ETH,Wheat,0.30,"Arsi/Bale highlands ~30% of national wheat (CSA); v1 estimate"
-eth_gojjam,ETH,Maize,0.10,"West Gojjam maize/tef mixed; v1 estimate"
-eth_oromia_maize,ETH,Maize,0.30,"Western Oromia (Wellega/Jimma) largest maize belt; v1 estimate"
-tza_mbeya,TZA,Maize,0.12,"Mbeya/Southern Highlands ~10-15% of national maize; v1 estimate"
-uga_masindi,UGA,Maize,0.05,"Masindi mid-west; v1 estimate"
-uga_eastern,UGA,Maize,0.22,"Eastern region (Iganga-Mbale) main producer; v1 estimate"
-rwa_eastern,RWA,Maize,0.35,"Eastern Province largest cereal surplus area (NISR); crop mask is sorghum - Ky mismatch flagged in SCOPING-CPI 8"
-zmb_central,ZMB,Maize,0.20,"Central province; ZamStats crop forecast surveys; v1 estimate"
-zmb_southern,ZMB,Maize,0.14,"Southern province; v1 estimate"
-zmb_eastern,ZMB,Maize,0.20,"Eastern province; v1 estimate"
-mwi_lilongwe,MWI,Maize,0.15,"Lilongwe ADD plain; v1 estimate"
-zwe_mash_west,ZWE,Maize,0.20,"Mashonaland West top maize province; v1 estimate"
-moz_manica,MOZ,Maize,0.10,"Manica; v1 estimate"
-moz_zambezia,MOZ,Maize,0.22,"Zambezia largest producer; v1 estimate"
-mdg_vakinankaratra,MDG,Rice,0.10,"Vakinankaratra highlands (rice-led basket); v1 estimate"
-zaf_free_state,ZAF,Maize,0.40,"Free State ~40% of national maize (CEC); v1 estimate"
-zaf_north_west,ZAF,Maize,0.15,"North West; v1 estimate"
-zaf_mpumalanga,ZAF,Maize,0.23,"Mpumalanga; v1 estimate"
+ken_kitui,KEN,Maize,0.112,GAEZ+2015 measured; auto-added V2.2
+ken_machakos,KEN,Maize,0.059,GAEZ+2015 measured; auto-added V2.2
+ken_makueni,KEN,Maize,0.057,GAEZ+2015 measured; auto-added V2.2
+ken_kilifi,KEN,Maize,0.055,GAEZ+2015 measured; auto-added V2.2
+ken_narok,KEN,Maize,0.051,GAEZ+2015 measured; auto-added V2.2
+ken_kakamega,KEN,Maize,0.047,GAEZ+2015 measured; auto-added V2.2
+ken_nandi,KEN,Maize,0.044,GAEZ+2015 measured; auto-added V2.2
+ken_kisumu,KEN,Maize,0.042,GAEZ+2015 measured; auto-added V2.2
+ken_uasin_gishu,KEN,Maize,0.042,GAEZ+2015 measured
+ken_trans_nzoia,KEN,Maize,0.027,GAEZ+2015 measured
+eth_snnpr,ETH,Maize,0.163,GAEZ+2015 measured; auto-added V2.2
+eth_arsi,ETH,Wheat,0.025,GAEZ+2015 measured
+eth_gojjam,ETH,Wheat,0.147,GAEZ+2015 measured
+eth_oromia_maize,ETH,Maize,0.212,GAEZ+2015 measured
+tza_shinyanga,TZA,Maize,0.086,GAEZ+2015 measured; auto-added V2.2
+tza_tabora,TZA,Maize,0.086,GAEZ+2015 measured; auto-added V2.2
+tza_simiyu,TZA,Maize,0.059,GAEZ+2015 measured; auto-added V2.2
+tza_mwanza,TZA,Maize,0.053,GAEZ+2015 measured; auto-added V2.2
+tza_ruvuma,TZA,Maize,0.052,GAEZ+2015 measured; auto-added V2.2
+tza_tanga,TZA,Maize,0.05,GAEZ+2015 measured; auto-added V2.2
+tza_iringa,TZA,Maize,0.046,GAEZ+2015 measured; auto-added V2.2
+tza_morogoro,TZA,Maize,0.044,GAEZ+2015 measured; auto-added V2.2
+tza_mbeya,TZA,Maize,0.049,GAEZ+2015 measured
+rwa_southern,RWA,Maize,0.342,GAEZ+2015 measured; auto-added V2.2
+rwa_northern,RWA,Maize,0.216,GAEZ+2015 measured; auto-added V2.2
+rwa_western,RWA,Maize,0.206,GAEZ+2015 measured; auto-added V2.2
+rwa_eastern,RWA,Sorghum,0.312,GAEZ+2015 measured
+uga_northern,UGA,Maize,0.228,GAEZ+2015 measured; auto-added V2.2
+uga_masindi,UGA,Maize,0.063,GAEZ+2015 measured
+uga_eastern,UGA,Maize,0.231,GAEZ+2015 measured
+zmb_lusaka,ZMB,Maize,0.033,GAEZ+2015 measured; auto-added V2.2
+zmb_central,ZMB,Maize,0.067,GAEZ+2015 measured
+zmb_southern,ZMB,Maize,0.05,GAEZ+2015 measured
+zmb_eastern,ZMB,Maize,0.058,GAEZ+2015 measured
+mwi_southern,MWI,Maize,0.422,GAEZ+2015 measured; auto-added V2.2
+mwi_lilongwe,MWI,Maize,0.506,GAEZ+2015 measured
+zwe_mashonaland_east,ZWE,Maize,0.108,GAEZ+2015 measured; auto-added V2.2
+zwe_mashonaland_central,ZWE,Maize,0.091,GAEZ+2015 measured; auto-added V2.2
+zwe_manicaland,ZWE,Maize,0.087,GAEZ+2015 measured; auto-added V2.2
+zwe_midlands,ZWE,Maize,0.083,GAEZ+2015 measured; auto-added V2.2
+zwe_manicaland2,ZWE,Maize,0.031,GAEZ+2015 measured; auto-added V2.2
+zwe_masvingo,ZWE,Maize,0.029,GAEZ+2015 measured; auto-added V2.2
+zwe_mash_west,ZWE,Maize,0.116,GAEZ+2015 measured
+moz_tete,MOZ,Maize,0.141,GAEZ+2015 measured; auto-added V2.2
+moz_nampula,MOZ,Maize,0.11,GAEZ+2015 measured; auto-added V2.2
+moz_niassa,MOZ,Maize,0.071,GAEZ+2015 measured; auto-added V2.2
+moz_zambezia2,MOZ,Maize,0.064,GAEZ+2015 measured; auto-added V2.2
+moz_tete2,MOZ,Maize,0.056,GAEZ+2015 measured; auto-added V2.2
+moz_manica,MOZ,Maize,0.093,GAEZ+2015 measured
+moz_zambezia,MOZ,Maize,0.254,GAEZ+2015 measured
+mdg_fianarantsoa,MDG,Rice,0.086,GAEZ+2015 measured; auto-added V2.2
+mdg_toamasina,MDG,Rice,0.066,GAEZ+2015 measured; auto-added V2.2
+mdg_toliara,MDG,Rice,0.026,GAEZ+2015 measured; auto-added V2.2
+mdg_vakinankaratra,MDG,Maize,0.115,GAEZ+2015 measured
+zaf_gauteng,ZAF,Maize,0.057,GAEZ+2015 measured; auto-added V2.2
+zaf_free_state,ZAF,Maize,0.256,GAEZ+2015 measured
+zaf_north_west,ZAF,Maize,0.126,GAEZ+2015 measured
+zaf_mpumalanga,ZAF,Maize,0.208,GAEZ+2015 measured

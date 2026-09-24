@@ -73,6 +73,15 @@ ZONES = {
                        [("main", 10, 4)]),
 }
 
+# V2.2 auto-expanded zones (compute/zone_expand.py): production-ranked
+# FEWS polygons that lift monitored share of national staple output
+# toward the 70% target. Generated file — regenerate, don't hand-edit.
+try:
+    from zones_auto import AUTO_ZONES
+    ZONES.update(AUTO_ZONES)
+except ImportError:
+    pass
+
 # zones whose crop-zone polygon has no pre-computed zonal stats on the
 # server (all-null values — e.g. every Malawi crop zone) fall back to
 # admin-1 boundaries

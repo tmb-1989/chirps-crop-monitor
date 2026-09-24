@@ -66,7 +66,8 @@ CREATE TABLE IF NOT EXISTS live.zone_output_shock (
     shock_p10   REAL,
     shock_p90   REAL,
     as_of       TEXT,
-    computed_at TEXT NOT NULL
+    computed_at TEXT NOT NULL,
+    season      TEXT               -- V2.5: which season the reading is
 );
 CREATE TABLE IF NOT EXISTS live.cpi_impulse (
     country     TEXT PRIMARY KEY,
@@ -97,7 +98,9 @@ def load_econ():
 def season_windows(seasons: str) -> list[tuple[str, int, int]]:
     """'long_rains:3-9,second:8-11' -> [(name, start_month, end_month)]."""
     out = []
-    for part in seasons.split(","):
+    for part in (seasons or "").split(","):
+        if ":" not in part:
+            continue
         name, ab = part.split(":")
         a, b = ab.split("-")
         out.append((name, int(a), int(b)))
@@ -125,9 +128,11 @@ def wrsi_at_season_end(con, zk: str, a: int, b: int,
 
 
 def current_wrsi(con, zk: str, seasons: str,
-                 today: dt.date) -> tuple[float, str, int] | None:
-    """(wrsi, as_of, provisional) for the season containing today, or
-    the season that ended within the last 60 days (harvest read)."""
+                 today: dt.date) -> tuple[float, str, int, str] | None:
+    """(wrsi, as_of, provisional, season_name) for the season
+    containing today, or the season that ended within the last 60 days
+    (harvest read). V2.5: the season name travels with the reading so
+    bimodal zones carry separate labels."""
     for name, a, b in season_windows(seasons):
         for year in (today.year, today.year + (1 if a > b else 0)):
             start, end = season_span(year, a, b)
@@ -139,7 +144,8 @@ def current_wrsi(con, zk: str, seasons: str,
                     "ORDER BY granule_start DESC LIMIT 1",
                     (zk, start.isoformat(), end.isoformat())).fetchone()
                 if row:
-                    return row[0], row[1], int(today <= end)
+                    return (row[0], row[1], int(today <= end),
+                            name.replace("_", " "))
     return None
 
 
@@ -168,38 +174,39 @@ def season_pairs(con, iso3: str, zones: list[dict]) -> list[tuple]:
         return []
     px["month"] = pd.to_datetime(px.month)
     px = px.set_index("month").usd_kg
-    pts = []
     zmeta = {z["zone_key"]: z for z in zones}
     seasons = {r[0]: r[1] for r in con.execute(
         "SELECT zone_key, seasons FROM zones")}
+    # V2.5: one point per (year, season window) — bimodal countries get
+    # their short-rains harvests as their own observations instead of
+    # being folded into the main season
+    windows: dict = {}
+    for zk in zmeta:
+        for name, a, b in season_windows(seasons.get(zk, "") or ""):
+            windows.setdefault((a, b), set()).add(zk)
+    pts = []
     for year in range(2007, dt.date.today().year + 1):
-        num = den = 0.0
-        end_m = None
-        for zk, z in zmeta.items():
-            if zk not in seasons:
+        for (a, b), zks in windows.items():
+            num = den = 0.0
+            for zk in zks:
+                w = wrsi_at_season_end(con, zk, a, b, year)
+                if w is None:
+                    continue
+                share = float(zmeta[zk]["share_national"])
+                num += share * min(KY.get(zmeta[zk]["commodity"], 1.25)
+                                   * (1 - w / 100.0), 1.0)
+                den += share
+            if not den:
                 continue
-            # main season = the longest window
-            name, a, b = max(season_windows(seasons[zk]),
-                             key=lambda s: (s[2] - s[1]) % 12)
-            w = wrsi_at_season_end(con, zk, a, b, year)
-            if w is None:
+            shock = max(num / den, 0.0)
+            # post-harvest: 3 months starting the month after season end
+            t0 = pd.Timestamp(year, b, 1) + pd.offsets.MonthBegin(1)
+            cur = px[t0:t0 + pd.offsets.MonthBegin(3)].mean()
+            prev = px[t0 - pd.offsets.MonthBegin(12):
+                      t0 - pd.offsets.MonthBegin(9)].mean()
+            if np.isnan(cur) or np.isnan(prev) or prev <= 0:
                 continue
-            share = float(z["share_national"])
-            num += share * min(KY.get(z["commodity"], 1.25)
-                               * (1 - w / 100.0), 1.0)
-            den += share
-            end_m = b
-        if not den or end_m is None:
-            continue
-        shock = max(num / den, 0.0)
-        # post-harvest window: 3 months starting the month after season end
-        t0 = pd.Timestamp(year, end_m, 1) + pd.offsets.MonthBegin(1)
-        cur = px[t0:t0 + pd.offsets.MonthBegin(3)].mean()
-        prev = px[t0 - pd.offsets.MonthBegin(12):
-                  t0 - pd.offsets.MonthBegin(9)].mean()
-        if np.isnan(cur) or np.isnan(prev) or prev <= 0:
-            continue
-        pts.append((year, shock, cur / prev - 1))
+            pts.append((year, shock, cur / prev - 1))
     return pts
 
 
@@ -234,7 +241,7 @@ def country_impulse(con, iso3: str, zones: list[dict], cw: dict,
     coverage = sum(float(z["share_national"]) for z, *_ in live)
     e_fit, n_fit = fit_elasticity(con, iso3, zones)
     shocks = np.zeros(DRAWS)
-    for z, wrsi, as_of, prov in live:
+    for z, wrsi, as_of, prov, _season in live:
         draws, _ = leg_a(wrsi, KY.get(z["commodity"], 1.25), rng)
         shocks += float(z["share_national"]) * draws
     covered = shocks / max(coverage, 1e-6)
@@ -244,10 +251,10 @@ def country_impulse(con, iso3: str, zones: list[dict], cw: dict,
     dp = np.minimum(elast * shocks, PARITY_CAP)
     cpi = dp * float(cw["staple_share_food"]) \
         * float(cw["food_cpi_weight"]) * 100
-    provisional = int(any(p for *_, p in live))
+    provisional = int(any(p for _, _, _, p, _ in live))
     q = lambda a, p: float(np.percentile(a, p))  # noqa: E731
     return {
-        "season": ", ".join(sorted({a[:7] for _, _, a, _ in live})),
+        "season": ", ".join(sorted({f"{sn} ({a[:7]})" for _, _, a, _, sn in live})),
         "coverage": round(coverage, 3),
         "out_shock": q(shocks, 50), "out_p10": q(shocks, 10),
         "out_p90": q(shocks, 90),
@@ -255,8 +262,9 @@ def country_impulse(con, iso3: str, zones: list[dict], cw: dict,
         "elasticity": round(e_fit, 2), "provisional": provisional,
         "inputs_json": json.dumps({
             "zones": {z["zone_key"]: {"wrsi": w, "as_of": a,
+                                      "season": sn,
                                       "share": z["share_national"]}
-                      for z, w, a, _ in live},
+                      for z, w, a, _, sn in live},
             "elasticity_fit_seasons": n_fit,
             "assumptions": "Ky FAO33; parity cap 50%; uncovered 0-50% "
                            "of covered shock; ceteris paribus FX/policy"}),
@@ -314,6 +322,10 @@ def main() -> int:
     rng = np.random.default_rng(42)
     con = db.connect()
     con.executescript(SCHEMA)
+    if "season" not in [r[1] for r in con.execute(
+            "SELECT * FROM pragma_table_info('zone_output_shock', 'live')")]:
+        con.execute("ALTER TABLE live.zone_output_shock ADD COLUMN "
+                    "season TEXT")
     pw, cw = load_econ()
     seasons = {r[0]: r[1] for r in con.execute(
         "SELECT zone_key, seasons FROM zones")}
@@ -346,17 +358,17 @@ def main() -> int:
         cur = current_wrsi(con, z["zone_key"], z["seasons"], today)
         if cur is None:
             con.execute("INSERT OR REPLACE INTO zone_output_shock VALUES "
-                        "(?,?,?,NULL,0,0,NULL,NULL,NULL,NULL,?)",
+                        "(?,?,?,NULL,0,0,NULL,NULL,NULL,NULL,?,NULL)",
                         (z["zone_key"], z["iso3"], z["commodity"], now))
             continue
-        wrsi, as_of, prov = cur
+        wrsi, as_of, prov, season = cur
         shock, sd = leg_a(wrsi, KY.get(z["commodity"], 1.25))
         con.execute(
             "INSERT OR REPLACE INTO zone_output_shock VALUES "
-            "(?,?,?,?,1,?,?,?,?,?,?)",
+            "(?,?,?,?,1,?,?,?,?,?,?,?)",
             (z["zone_key"], z["iso3"], z["commodity"], wrsi, prov, shock,
              max(shock - 1.282 * sd, 0), min(shock + 1.282 * sd, 1),
-             as_of, now))
+             as_of, now, season))
         print(f"[{z['zone_key']}] WRSI {wrsi:.0f} -> shock "
               f"{shock:.0%} ({'prov' if prov else 'final'})")
 
