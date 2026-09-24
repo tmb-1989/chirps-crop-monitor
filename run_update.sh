@@ -19,12 +19,13 @@ git pull --rebase --autostash origin main
 ./venv/bin/python compute/cpi_impulse.py
 ./venv/bin/python compute/country_risk.py
 # push refreshed data so the deployed Streamlit app stays current.
-# live.sqlite (risk board, ENSO/IOD, Kariba — a few hundred KB) goes daily;
-# the ~54MB monitor.sqlite only on dekad days, since sqlite binaries don't
-# delta-compress and daily commits would grow the repo by GBs/month.
+# live.sqlite (risk board, ENSO/IOD, Kariba — a few hundred KB) goes daily.
+# The full monitor.sqlite is local-only since the V2 zone expansion put
+# it past GitHub's 100MB hard limit; dekad days commit the trimmed
+# app.sqlite (observations >= 2010, ingest/app_db.py) instead.
 git add db/live.sqlite
 case $(date +%-d) in
-  3|8|13|18|23|28) git add db/monitor.sqlite;;
+  3|8|13|18|23|28) ./venv/bin/python ingest/app_db.py && git add db/app.sqlite;;
 esac
 git diff --cached --quiet || git commit -m "data update $(date +%F)"
 git push origin main

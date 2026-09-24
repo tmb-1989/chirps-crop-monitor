@@ -13,7 +13,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-DB = pathlib.Path(__file__).resolve().parent.parent / "db" / "monitor.sqlite"
+# full archive locally; deployed clones carry the trimmed app.sqlite
+# (observations >= 2010 — see ingest/app_db.py; GitHub's 100MB limit)
+_dbdir = pathlib.Path(__file__).resolve().parent.parent / "db"
+DB = _dbdir / "monitor.sqlite"
+if not DB.exists():
+    DB = _dbdir / "app.sqlite"
 # fast-moving tables (risk board, ENSO/IOD, Kariba, GEFS, alerts) live in a
 # small separate file committed daily; see ingest/split_db.py
 LIVE = DB.parent / "live.sqlite"

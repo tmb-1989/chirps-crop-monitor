@@ -8,3 +8,4 @@ __pycache__/
 .DS_Store
 data/ntfy_topic.txt
 data/alert_email.json
+db/monitor.sqlite
