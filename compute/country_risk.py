@@ -131,18 +131,23 @@ def _age(date_str: str | None, today: dt.date) -> int:
     return (today - dt.date.fromisoformat(date_str[:10])).days
 
 
-def season_of(seasons: str | None, month: int) -> str | None:
-    """Name of the season window containing `month`, or None
-    ('belg:2-5,kiremt:6-9'; cross-year like 'main:10-4' supported).
+def window_of(seasons: str | None, month: int) -> tuple | None:
+    """(name, start_month, end_month) of the season window containing
+    `month` ('belg:2-5,kiremt:6-9'; cross-year 'main:10-4' supported).
     V2.5: bimodal zones report which season a reading belongs to."""
     for tok in (seasons or "").split(","):
-        if not tok:
+        if ":" not in tok:
             continue
         name, ab = tok.split(":")
         a, b = map(int, ab.split("-"))
         if (a <= month <= b) if a <= b else (month >= a or month <= b):
-            return name.replace("_", " ")
+            return name.replace("_", " "), a, b
     return None
+
+
+def season_of(seasons: str | None, month: int) -> str | None:
+    w = window_of(seasons, month)
+    return w[0] if w else None
 
 
 def in_season(seasons: str | None, month: int) -> bool:
@@ -347,8 +352,17 @@ def drought_zones(con, today: dt.date) -> pd.DataFrame:
         sp = spi[spi.zone_key == z.zone_key]
         s3 = sp.spi3.iloc[0] if not sp.empty else None
         s3_d = sp.granule_start.iloc[0] if not sp.empty else None
-        wr_season = None if wr_d is None else \
-            season_of(z.seasons, dt.date.fromisoformat(wr_d).month)
+        wr_win = None if wr_d is None else \
+            window_of(z.seasons, dt.date.fromisoformat(wr_d).month)
+        wr_season = wr_win[0] if wr_win else None
+        # a reading in the first month of a window is not yet a season
+        # signal — early dekads read as extremes (RWA Sep 2026)
+        if wr_win and wr_d:
+            rd = dt.date.fromisoformat(wr_d)
+            start = dt.date(rd.year - (1 if wr_win[1] > rd.month else 0),
+                            wr_win[1], 1)
+            if (rd - start).days < 30:
+                wr_season = None
         wr_ok = _age(wr_d, today) <= STALE["wrsi"] and wr is not None \
             and wr_season is not None
         sm_ok = sm is not None and _age(sm_d, today) <= STALE["sm"]

@@ -143,7 +143,10 @@ def current_wrsi(con, zk: str, seasons: str,
                     "granule_start BETWEEN ? AND ? "
                     "ORDER BY granule_start DESC LIMIT 1",
                     (zk, start.isoformat(), end.isoformat())).fetchone()
-                if row:
+                # a season less than ~1 month in has no meaningful WRSI
+                # yet — early dekads read as extremes (RWA Sep 2026)
+                if row and dt.date.fromisoformat(row[1]) >= \
+                        start + dt.timedelta(days=30):
                     return (row[0], row[1], int(today <= end),
                             name.replace("_", " "))
     return None
@@ -230,7 +233,11 @@ def fit_elasticity(con, iso3: str, zones: list[dict]) -> tuple[float, int]:
 
 def country_impulse(con, iso3: str, zones: list[dict], cw: dict,
                     today: dt.date, rng) -> dict | None:
-    """Monte Carlo the chain for one country; None when out of season."""
+    """Monte Carlo the chain for one country; None when out of season.
+    Only zones growing the CPI staple aggregate — mixing commodities
+    double-counted land and pushed RWA coverage past 100%."""
+    zones = [z for z in zones
+             if z["commodity"] == cw["staple_commodity"]]
     live = []
     for z in zones:
         cur = current_wrsi(con, z["zone_key"], z["seasons"], today)

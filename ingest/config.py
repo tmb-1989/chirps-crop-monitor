@@ -88,6 +88,13 @@ except ImportError:
 VECTOR_OVERRIDES = {
     "mwi_lilongwe": ADMIN1_VECTOR,
     "moz_zambezia": ADMIN1_VECTOR,
+    # V2.2 auto zones whose crop polygons return all-null zonal stats
+    # (same server gap as above) — fall back to admin-1
+    "tza_tanga": ADMIN1_VECTOR,
+    "mwi_southern": ADMIN1_VECTOR,
+    "moz_zambezia2": ADMIN1_VECTOR,
+    "zmb_lusaka": ADMIN1_VECTOR,
+    "zwe_mashonaland_central": ADMIN1_VECTOR,
     # EWX only; the local raster pipeline keeps the crop polygon for this
     # zone (built before the override), so local vs EWX bases differ here
     "zaf_mpumalanga": ADMIN1_VECTOR,
