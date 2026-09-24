@@ -7,3 +7,4 @@ shapely>=2
 pyshp
 netCDF4        # near-real-time IOD from OISST (ingest/iod.py)
 beautifulsoup4 # ZRA Kariba scraper (ingest/kariba.py)
+matplotlib
