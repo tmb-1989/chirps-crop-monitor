@@ -127,9 +127,18 @@ def zonal_means(tif_bytes: bytes, masks: dict, window_bounds=None) -> dict:
     for key, m in masks.items():
         if m.shape != arr.shape:
             raise RuntimeError(f"grid mismatch for {key}: {m.shape} vs {arr.shape}")
-        vals = arr[m]
-        vals = vals[(vals != nodata) & np.isfinite(vals)]
-        out[key] = float(vals.mean()) if vals.size else None
+        if m.dtype == bool:
+            vals = arr[m]
+            vals = vals[(vals != nodata) & np.isfinite(vals)]
+            out[key] = float(vals.mean()) if vals.size else None
+        else:
+            # V2.8 crop-area weights (ingest/zone_weights.py):
+            # mean = sum(rain * area) / sum(area) over valid pixels
+            sel = m > 0
+            vals, w = arr[sel], m[sel]
+            ok = (vals != nodata) & np.isfinite(vals)
+            out[key] = float((vals[ok] * w[ok]).sum() / w[ok].sum()) \
+                if ok.any() else None
     return out
 
 
@@ -213,6 +222,12 @@ def main() -> int:
     else:
         ref = fetch(f"{FINAL_DIR}/{finals[-1]}")
         masks, bounds = build_masks(ref)
+    # V2.8: crop-area weights supersede boolean masks when built
+    weights_npz = MASKS_NPZ.parent / "weights.npz"
+    if weights_npz.exists():
+        w = np.load(weights_npz)
+        masks = {k: w[k] for k in w.files if k != "__bounds__"}
+        print(f"using crop-area weights for {len(masks)} zones")
 
     n1 = process(finals, FINAL_DIR, DS_FINAL, masks, con)
     n2 = process(prelims, PRELIM_DIR, DS_PRELIM, masks, con,
