@@ -186,6 +186,8 @@ def fetch_reservoir_data(con) -> int:
     groups = []
     for cell in trs[0].find_all(["td", "th"])[1:]:
         label = cell.get_text(strip=True)
+        if not label:  # padding cell (Sep 2026 layout)
+            continue
         month_start = _parse_month_header(label)
         if month_start is None:
             raise ValueError(f"unparseable month header {label!r}")
