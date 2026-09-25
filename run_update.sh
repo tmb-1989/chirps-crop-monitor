@@ -18,6 +18,9 @@ git pull --rebase --autostash origin main
 ./venv/bin/python compute/flood_signals.py
 ./venv/bin/python compute/cpi_impulse.py
 ./venv/bin/python compute/country_risk.py
+# escalate silent feed rot (a stale feed grays cells but told no one
+# until Sep 2026) — one email per episode, non-fatal
+./venv/bin/python compute/staleness_watch.py || echo "WARN: staleness watch failed"
 # push refreshed data so the deployed Streamlit app stays current.
 # live.sqlite (risk board, ENSO/IOD, Kariba — a few hundred KB) goes daily.
 # The full monitor.sqlite is local-only since the V2 zone expansion put
