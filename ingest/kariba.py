@@ -177,46 +177,63 @@ def _parse_month_header(label: str):
 
 
 def fetch_reservoir_data(con) -> int:
-    """Parse the reservoir table (current month x 3 years, colspan groups)."""
+    """Parse the reservoir table (current month x 3 years).
+
+    Layout drifts (Sep 2026): month headers may span their columns via
+    colspan attributes OR via empty padding cells, and the sub-header
+    may occupy one or several rows ('Turbine' / 'Discharge (m3/s)').
+    Parse column-wise: forward-fill the month across columns, join the
+    sub-header rows per column, map to fields fuzzily."""
     soup = BeautifulSoup(_get(RESERVOIR_URL).text, "html.parser")
     table = soup.find("table")
     if table is None:
         raise ValueError("ZRA reservoir-data page: no table found")
     trs = table.find_all("tr")
-    groups = []
-    for cell in trs[0].find_all(["td", "th"])[1:]:
-        label = cell.get_text(strip=True)
-        if not label:  # padding cell (Sep 2026 layout)
-            continue
-        month_start = _parse_month_header(label)
-        if month_start is None:
-            raise ValueError(f"unparseable month header {label!r}")
-        groups.append((month_start, int(cell.get("colspan", 1))))
-    sub = [c.get_text(strip=True).lower() for c in trs[1].find_all(["td", "th"])]
-    if sub and sub[0] == "day":
-        sub = sub[1:]
-    col_names, i = [], 0
-    for month_start, span in groups:
-        col_names.append((month_start, sub[i:i + span]))
-        i += span
+    # expand row 0 honoring colspan, then forward-fill months per column
+    row0 = []
+    for cell in trs[0].find_all(["td", "th"]):
+        row0.extend([cell.get_text(strip=True)]
+                    + [""] * (int(cell.get("colspan", 1)) - 1))
+    header_rows, data_start = [], None
+    for i, tr in enumerate(trs[1:], start=1):
+        cells = [c.get_text(strip=True) for c in tr.find_all(["td", "th"])]
+        if cells and cells[0].isdigit():
+            data_start = i
+            break
+        header_rows.append(cells)
+    if data_start is None:
+        raise ValueError("ZRA reservoir-data page: no data rows")
+    ncols = max([len(row0)] + [len(r) for r in header_rows])
+    col_month, cur = [None] * ncols, None
+    for j in range(ncols):
+        label = row0[j] if j < len(row0) else ""
+        if label and label.lower() != "day":
+            m = _parse_month_header(label)
+            if m is not None:
+                cur = m
+        col_month[j] = cur
+    col_field = [None] * ncols
+    for j in range(1, ncols):
+        joined = " ".join(r[j] for r in header_rows if j < len(r)).lower()
+        col_field[j] = _field_for(joined)
     recs = {}
-    for tr in trs[2:]:
+    for tr in trs[data_start:]:
         cells = [c.get_text(strip=True) for c in tr.find_all(["td", "th"])]
         if not cells or not cells[0].isdigit():
             continue
-        day_no, j = int(cells[0]), 1
-        for month_start, names in col_names:
-            for name in names:
-                val = _num(cells[j]) if j < len(cells) else None
-                j += 1
-                field = _field_for(name)
-                if val is None or field is None:
-                    continue
-                try:
-                    date = month_start.replace(day=day_no).isoformat()
-                except ValueError:
-                    continue
-                recs.setdefault(date, {})[field] = _bound(field, val)
+        day_no = int(cells[0])
+        for j in range(1, min(ncols, len(cells))):
+            field, month_start = col_field[j], col_month[j]
+            if field is None or month_start is None:
+                continue
+            val = _num(cells[j])
+            if val is None:
+                continue
+            try:
+                date = month_start.replace(day=day_no).isoformat()
+            except ValueError:
+                continue
+            recs.setdefault(date, {})[field] = _bound(field, val)
     if not recs:
         raise ValueError("ZRA reservoir-data page: table parsed to zero rows")
     for date, f in recs.items():

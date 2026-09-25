@@ -38,6 +38,10 @@ FEEDS = [
     ("IOD DMI (OISST)", "SELECT max(date) FROM iod_dmi_oisst", 90),
     ("Kariba levels (ZRA)", "SELECT max(date) FROM kariba_level "
      "WHERE vintage='current'", 14),
+    # discharge went stale independently of levels (Sep 2026 layout
+    # drift filled dates with null values) — watch the value, not the row
+    ("Kariba turbine discharge (ZRA)", "SELECT max(date) FROM "
+     "kariba_reservoir WHERE turbine_discharge_m3s IS NOT NULL", 14),
     ("WFP staple prices", "SELECT max(month) FROM staple_prices", 75),
 ]
 
