@@ -106,8 +106,12 @@ def fetch_lake_levels(con, today=None) -> int:
             continue
         # "23-Jun" belongs to the current year unless that lands in the
         # future (a December row read in January) — then roll back a year.
+        # ZRA drifts between month styles ("Sep", "Sept", "June") —
+        # normalize to the 3-letter form strptime accepts (Sep 2026 break).
         try:
-            day = dt.datetime.strptime(f"{cells[0]}-{today.year}", "%d-%b-%Y")
+            dpart, mpart = cells[0].split("-", 1)
+            day = dt.datetime.strptime(
+                f"{dpart}-{mpart[:3]}-{today.year}", "%d-%b-%Y")
         except ValueError:
             continue
         if day > today + dt.timedelta(days=3):
@@ -152,8 +156,16 @@ def _parse_month_header(label: str):
     """ZRA hand-edits these headers and typos are routine ('Aiugust 2026'),
     so match the month fuzzily and regex the year."""
     year = re.search(r"\b(19|20)\d{2}\b", label)
+    if year:
+        yr = int(year.group(0))
+    else:
+        # Sep 2026 drift: two-digit years ('Sep-24')
+        y2 = re.search(r"[-'\s](\d{2})\b", label)
+        if not y2:
+            return None
+        yr = 2000 + int(y2.group(1))
     word = re.search(r"[A-Za-z]+", label)
-    if not year or not word:
+    if not word:
         return None
     name = word.group(0).lower()
     match = [m for m in _MONTHS if m.startswith(name[:3]) and len(name) >= 3]
@@ -161,7 +173,7 @@ def _parse_month_header(label: str):
         match = get_close_matches(name, _MONTHS, n=1, cutoff=0.6)
     if not match:
         return None
-    return dt.date(int(year.group(0)), _MONTHS.index(match[0]) + 1, 1)
+    return dt.date(yr, _MONTHS.index(match[0]) + 1, 1)
 
 
 def fetch_reservoir_data(con) -> int:
