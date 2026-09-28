@@ -42,6 +42,17 @@ FEEDS = [
     # drift filled dates with null values) — watch the value, not the row
     ("Kariba turbine discharge (ZRA)", "SELECT max(date) FROM "
      "kariba_reservoir WHERE turbine_discharge_m3s IS NOT NULL", 14),
+    # corruption sentinel: the Sep 26 2026 column shift wrote pct_full
+    # values into turbine (plausible 40s, invisible to staleness).
+    # Reports 'no data' (=alert) whenever recent discharge mirrors
+    # pct_full or sits below any real generation level.
+    ("Kariba discharge sanity (ZRA)",
+     "SELECT CASE WHEN EXISTS (SELECT 1 FROM kariba_reservoir WHERE "
+     "date >= date('now','-10 day') AND turbine_discharge_m3s IS NOT "
+     "NULL AND (abs(turbine_discharge_m3s - pct_full) < 0.01 OR "
+     "turbine_discharge_m3s < 100)) THEN NULL ELSE "
+     "(SELECT max(date) FROM kariba_reservoir WHERE "
+     "turbine_discharge_m3s IS NOT NULL) END", 14),
     ("WFP staple prices", "SELECT max(month) FROM staple_prices", 75),
 ]
 
