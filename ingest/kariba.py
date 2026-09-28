@@ -204,6 +204,12 @@ def fetch_reservoir_data(con) -> int:
     if data_start is None:
         raise ValueError("ZRA reservoir-data page: no data rows")
     ncols = max([len(row0)] + [len(r) for r in header_rows])
+    # ZRA drifts on whether sub-header rows carry a leading cell under
+    # 'Day' (dropped Sep 26 2026, shifting every field one column left
+    # and corrupting turbine<-pct_full). Right-align: pad short header
+    # rows on the LEFT so their last column matches the data grid.
+    header_rows = [[""] * (ncols - len(r)) + r if len(r) < ncols else r
+                   for r in header_rows]
     col_month, cur = [None] * ncols, None
     for j in range(ncols):
         label = row0[j] if j < len(row0) else ""
@@ -225,6 +231,10 @@ def fetch_reservoir_data(con) -> int:
         for j in range(1, min(ncols, len(cells))):
             field, month_start = col_field[j], col_month[j]
             if field is None or month_start is None:
+                continue
+            # misalignment tripwire: a percent-suffixed cell can only
+            # be pct_full — never let it land in another field
+            if cells[j].endswith("%") and field != "pct_full":
                 continue
             val = _num(cells[j])
             if val is None:
