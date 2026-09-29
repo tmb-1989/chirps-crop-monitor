@@ -55,3 +55,16 @@ zaf_gauteng,ZAF,Maize,0.057,GAEZ+2015 measured; auto-added V2.2
 zaf_free_state,ZAF,Maize,0.256,GAEZ+2015 measured
 zaf_north_west,ZAF,Maize,0.126,GAEZ+2015 measured
 zaf_mpumalanga,ZAF,Maize,0.208,GAEZ+2015 measured
+eth_coffee,ETH,Coffee,0.424,GAEZ Stimulants belt share; admin-1 Oromia; proxy raster — see SCOPING-V2.3
+uga_coffee,UGA,Coffee,0.195,GAEZ Stimulants belt share; admin-1 Central; proxy raster — see SCOPING-V2.3
+rwa_coffee,RWA,Coffee,0.892,GAEZ Stimulants belt share; admin-1 Western; proxy raster — see SCOPING-V2.3
+ken_coffee,KEN,Coffee,0.297,GAEZ Stimulants belt share; admin-1 Nyeri; proxy raster — see SCOPING-V2.3
+ken_tea,KEN,Tea,0.513,GAEZ Stimulants belt share; admin-1 Kericho; proxy raster — see SCOPING-V2.3
+mwi_tea,MWI,Tea,0.285,GAEZ Stimulants belt share; admin-1 Southern; proxy raster — see SCOPING-V2.3
+zwe_tobacco,ZWE,Tobacco,0.213,GAEZ Tobacco belt share; admin-1 Mashonaland East; proxy raster — see SCOPING-V2.3
+mwi_tobacco,MWI,Tobacco,0.367,GAEZ Tobacco belt share; admin-1 Central; proxy raster — see SCOPING-V2.3
+tza_tobacco,TZA,Tobacco,0.055,GAEZ Tobacco belt share; admin-1 Tabora; proxy raster — see SCOPING-V2.3
+moz_tobacco,MOZ,Tobacco,0.006,GAEZ Tobacco belt share; admin-1 Tete; proxy raster — see SCOPING-V2.3
+mdg_vanilla,MDG,Vanilla,0.11,GAEZ CropsNES belt share; admin-1 Antsiranana; proxy raster — see SCOPING-V2.3
+tza_cashew,TZA,Cashew,0.077,GAEZ CropsNES belt share; admin-1 Mtwara; proxy raster — see SCOPING-V2.3
+moz_cashew,MOZ,Cashew,0.143,GAEZ CropsNES belt share; admin-1 Nampula; proxy raster — see SCOPING-V2.3

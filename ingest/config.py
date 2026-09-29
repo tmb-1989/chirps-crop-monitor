@@ -82,6 +82,15 @@ try:
 except ImportError:
     pass
 
+# V2.3 export-crop zones (compute/export_zones.py): perennial belts on
+# admin-1 polygons, sector='export' — stress indicator only, feeding
+# the export board column, never the food-CPI chain.
+try:
+    from zones_export import EXPORT_ZONES, EXPORT_CROP
+    ZONES.update(EXPORT_ZONES)
+except ImportError:
+    EXPORT_ZONES, EXPORT_CROP = {}, {}
+
 # zones whose crop-zone polygon has no pre-computed zonal stats on the
 # server (all-null values — e.g. every Malawi crop zone) fall back to
 # admin-1 boundaries
@@ -99,6 +108,9 @@ VECTOR_OVERRIDES = {
     # zone (built before the override), so local vs EWX bases differ here
     "zaf_mpumalanga": ADMIN1_VECTOR,
 }
+# export zones are admin-1 by design (staple masks are the wrong
+# footprint for perennials)
+VECTOR_OVERRIDES.update({zk: ADMIN1_VECTOR for zk in EXPORT_ZONES})
 
 # one API request per (zone, dataset) — the API silently drops extra
 # datasets when several are colon-joined in raster_dataset.

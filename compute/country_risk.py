@@ -326,11 +326,23 @@ def hydro_status(con, today: dt.date) -> dict:
 RANK = {"gray": -1, "green": 0, "yellow": 1, "red": 2}
 
 
-def drought_zones(con, today: dt.date) -> pd.DataFrame:
+def drought_zones(con, today: dt.date, sector: str = "staple"
+                  ) -> pd.DataFrame:
     """Per-zone drought lights: one row per crop zone with status, the
-    tripping reason, and the raw readings (in-season WRSI, SPI-3, SM)."""
+    tripping reason, and the raw readings (in-season WRSI, SPI-3, SM).
+    V2.3: sector selects staple zones (default) or export belts — the
+    same water-stress thresholds, routed to different board columns."""
+    have_sector = "sector" in [r[1] for r in con.execute(
+        "SELECT * FROM pragma_table_info('zones')")]
     zones = pd.read_sql_query(
-        "SELECT zone_key, iso3, name, seasons FROM zones", con)
+        "SELECT zone_key, iso3, name, seasons FROM zones"
+        + (" WHERE coalesce(sector,'staple')=?" if have_sector else ""),
+        con, params=(sector,) if have_sector else ())
+    if not have_sector and sector == "export":
+        return pd.DataFrame(columns=["zone_key", "country", "name",
+                                     "status", "reason", "wrsi",
+                                     "wrsi_in_season", "spi3", "sm",
+                                     "season", "as_of", "_sev"])
     latest = pd.read_sql_query(
         "SELECT zone_key, dataset, granule_start, value FROM observations "
         "WHERE dataset IN ('lwrsi_africa_dekad_pctm',"
@@ -398,13 +410,14 @@ def drought_zones(con, today: dt.date) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def drought_status(zr: pd.DataFrame) -> dict:
+def drought_status(zr: pd.DataFrame,
+                   empty_reason: str = "no crop zones ingested") -> dict:
     """iso3 -> (status, reason, as_of): worst zone in drought_zones wins."""
     out = {}
     for c in ORDER:
         zs = zr[zr.country == c]
         if zs.empty:
-            out[c] = ("gray", "no crop zones ingested", None)
+            out[c] = ("gray", empty_reason, None)
             continue
         live = zs[zs.status != "gray"]
         if live.empty:
@@ -475,9 +488,13 @@ def main() -> int:
     con = db.connect()
     con.executescript(SCHEMA)
     zr = drought_zones(con, today)
+    zx = drought_zones(con, today, sector="export")
     factors = {"enso": enso_status(con, today),
                "iod": iod_status(con, today),
                "drought": drought_status(zr),
+               "export": drought_status(
+                   zx, empty_reason="no export-crop belts for this "
+                                    "country"),
                "flood": flood_status(con, today),
                "hydro": hydro_status(con, today)}
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
@@ -487,9 +504,10 @@ def main() -> int:
     con.executemany(
         "INSERT OR REPLACE INTO zone_risk VALUES "
         "(?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        [(r.zone_key, "drought", r.country, r["name"], r.status, r.reason,
+        [(r.zone_key, fac, r.country, r["name"], r.status, r.reason,
           r.wrsi, r.wrsi_in_season, r.spi3, r.sm, r.as_of, now, r.season)
-         for _, r in zr.iterrows()])
+         for fac, frame in (("drought", zr), ("export", zx))
+         for _, r in frame.iterrows()])
     prev = {(r[0], r[1]): r[2] for r in con.execute(
         "SELECT country, factor, status FROM country_risk")}
     for fac, states in factors.items():

@@ -62,7 +62,8 @@ def connect() -> sqlite3.Connection:
 
 def upsert_zone(con, zone_key, iso3, name, lat, lon, info, seasons):
     con.execute(
-        "INSERT OR REPLACE INTO zones VALUES (?,?,?,?,?,?,?,?,?)",
+        "INSERT OR REPLACE INTO zones (zone_key, iso3, name, lat, lon, "
+        "crop, adm0, adm1, seasons) VALUES (?,?,?,?,?,?,?,?,?)",
         (zone_key, iso3, name, lat, lon,
          (info or {}).get("crop"), (info or {}).get("adm0"),
          (info or {}).get("adm1"), seasons))

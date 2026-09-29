@@ -48,7 +48,8 @@ import db  # noqa: E402
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ECON = ROOT / "data" / "econ"
 
-KY = {"Maize": 1.25, "Wheat": 1.05, "Rice": 1.10}   # FAO 33/66 seasonal
+KY = {"Maize": 1.25, "Wheat": 1.05, "Rice": 1.10,
+      "Sorghum": 0.90}                 # FAO 33/66 seasonal
 E_PRIOR, E_LO, E_HI = 1.5, 0.5, 3.0   # price elasticity to shortfall
 PARITY_CAP = 0.50                     # import parity: max sustained rise
 SHOCK_SD_FRAC, SHOCK_SD_FLOOR = 0.35, 0.05   # leg-A noise (R^2 ~ 0.55)
@@ -340,6 +341,7 @@ def main() -> int:
         z["seasons"] = seasons.get(z["zone_key"], "")
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
+    pw = [z for z in pw if z["commodity"] in KY]  # V2.3: no perennials
     if args.hindcast:
         hindcast(con, pw)
         return 0
@@ -361,6 +363,11 @@ def main() -> int:
     # ---- leg A per zone ---------------------------------------------------
     for z in pw:
         if not z["seasons"]:
+            continue
+        # V2.3: perennial export crops have no defensible FAO water-
+        # yield function — no output-shock row; they are stress
+        # indicators on the export board column only
+        if z["commodity"] not in KY:
             continue
         cur = current_wrsi(con, z["zone_key"], z["seasons"], today)
         if cur is None:

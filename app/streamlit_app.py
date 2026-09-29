@@ -119,7 +119,8 @@ FILL = {"green": "#e6f4e6", "yellow": "#fdf3d7", "red": "#fbe3e3",
 def drought_region_block(expander: bool = True) -> None:
     """Per-zone drought lights table (zone_risk), worst-first per country.
     Rendered inside an expander (Country risk view) or inline (Overview)."""
-    zrisk = load("SELECT * FROM zone_risk WHERE factor='drought'")
+    zrisk = load("SELECT * FROM zone_risk WHERE factor IN "
+                 "('drought','export')")
     if zrisk.empty:
         return
     try:
@@ -175,7 +176,8 @@ def drought_region_block(expander: bool = True) -> None:
             drows.append({
                 "Country": NAMES_CR.get(z.country, z.country),
                 "Region": f"{DOT[z.status]} {z['name']}"
-                          + (f" · {season}" if season else ""),
+                          + (f" · {season}" if season else "")
+                          + (" 🌱" if z.factor == "export" else ""),
                 "WRSI %med": wr_txt, "SPI-3": sp_txt,
                 "Soil moisture": sm_txt, "Output shock": os_txt,
                 "Driver": z.reason})
@@ -211,8 +213,8 @@ if view == "Country risk":
         st.stop()
 
     FACTORS = [("enso", "El Niño / ENSO"), ("iod", "Indian Ocean Dipole"),
-               ("drought", "Drought"), ("flood", "Flood"),
-               ("hydro", "Hydropower")]
+               ("drought", "Drought"), ("export", "Export crops"),
+               ("flood", "Flood"), ("hydro", "Hydropower")]
 
     cell = {(r.country, r.factor): r for _, r in cr.iterrows()}
     rows, fills = [], []
