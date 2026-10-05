@@ -64,6 +64,19 @@ PARAMS = {
     "TZA": dict(arm=90, hot=90, consec=1, floor=5, region=(2, 1)),
     "RWA": dict(arm=90, hot=90, consec=2, floor=5, region=(2, 1)),
     "UGA": dict(arm=90, hot=95, consec=1, floor=5, region=(2, 1)),
+    # --- P6 (5 Oct 2026): PROVISIONAL defaults pending the pentad
+    # backfill + flood_calibrate run. Cyclone-belt disasters are often
+    # single-basin landfalls, hence region=(1, 1).
+    "MOZ": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
+    "MWI": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
+    "MDG": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
+    "ZMB": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
+    "ZWE": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
+    "ZAF": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
+    "NGA": dict(arm=80, hot=90, consec=2, floor=15, region=(1, 1)),
+    "GHA": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
+    "CIV": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
+    "BEN": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
 }
 ALERT_HOT = 97  # alert tier: hot pentad also above this percentile
 
@@ -160,6 +173,85 @@ EVENTS = {
         ("2020-05-01", "2020-05-31", "major"),      # Kasese/lake levels
         ("2022-07-15", "2022-08-31", "moderate"),   # Mbale
     ],
+    # --- P6 catalogs. Cyclone caveat: CHIRPS sees the RAIN, not the
+    # storm — events whose damage was surge/wind-led in areas without
+    # a basin (e.g. Kenneth 2019 in Cabo Delgado, Dikeledi 2025 in
+    # Nampula) are deliberately excluded rather than booked as misses.
+    "MOZ": [
+        ("2000-01-25", "2000-03-15", "major"),      # Limpopo + Eline
+        ("2001-01-15", "2001-03-31", "major"),      # Zambezi
+        ("2007-01-01", "2007-02-28", "major"),      # Zambezi + Favio
+        ("2008-01-01", "2008-02-15", "moderate"),   # Zambezi
+        ("2013-01-10", "2013-02-15", "major"),      # Limpopo/Chokwe
+        ("2015-01-05", "2015-02-15", "major"),      # Licungo/Zambezia
+        ("2019-03-10", "2019-04-05", "major"),      # Idai (Pungwe/Buzi)
+        ("2021-01-20", "2021-02-10", "major"),      # Eloise
+        ("2023-02-10", "2023-03-15", "major"),      # Freddy x2
+    ],
+    "MWI": [
+        ("2001-02-01", "2001-03-15", "moderate"),
+        ("2015-01-09", "2015-01-31", "major"),      # Shire valley
+        ("2019-03-05", "2019-03-25", "major"),      # Idai precursor rains
+        ("2022-01-24", "2022-02-10", "major"),      # Ana
+        ("2023-03-11", "2023-03-25", "major"),      # Freddy (Blantyre)
+    ],
+    "MDG": [
+        ("2000-02-15", "2000-03-10", "major"),      # Eline/Gloria
+        ("2004-03-05", "2004-03-20", "major"),      # Gafilo (SAVA)
+        ("2007-03-10", "2007-03-25", "major"),      # Indlala
+        ("2012-02-10", "2012-02-25", "major"),      # Giovanna
+        ("2015-01-15", "2015-03-01", "major"),      # Chedza (Antananarivo)
+        ("2017-03-05", "2017-03-20", "major"),      # Enawo (SAVA)
+        ("2018-01-03", "2018-01-15", "moderate"),   # Ava
+        ("2020-01-17", "2020-02-01", "moderate"),   # Tana floods
+        ("2022-01-17", "2022-02-25", "major"),      # Ana then Batsirai
+        ("2023-02-19", "2023-03-10", "major"),      # Freddy (Mananjary)
+        ("2024-03-25", "2024-04-05", "moderate"),   # Gamane (NE)
+    ],
+    "ZMB": [
+        ("2007-01-01", "2007-03-15", "major"),      # Zambezi/Barotse
+        ("2009-03-01", "2009-04-15", "moderate"),   # Barotse
+        ("2010-01-15", "2010-03-15", "moderate"),
+        ("2017-02-01", "2017-03-01", "moderate"),   # Lusaka urban
+        ("2020-01-01", "2020-02-28", "moderate"),
+        ("2023-02-01", "2023-03-15", "moderate"),
+    ],
+    "ZWE": [
+        ("2000-02-22", "2000-03-15", "major"),      # Eline
+        ("2017-02-15", "2017-03-05", "major"),      # Dineo (Tsholotsho)
+        ("2019-03-15", "2019-03-30", "major"),      # Idai (Chimanimani)
+        ("2021-01-23", "2021-02-05", "moderate"),   # Eloise spill
+    ],
+    "ZAF": [
+        ("2000-02-05", "2000-03-05", "major"),      # Limpopo 2000
+        ("2011-01-10", "2011-02-05", "moderate"),
+        ("2019-04-18", "2019-04-30", "major"),      # Durban Easter floods
+        ("2022-04-11", "2022-04-25", "major"),      # KZN/Durban
+        ("2023-02-01", "2023-02-28", "moderate"),   # inland summer floods
+    ],
+    "NGA": [
+        ("2012-08-15", "2012-10-31", "major"),      # Niger-Benue crest
+        ("2018-08-15", "2018-10-15", "major"),
+        ("2020-08-01", "2020-10-15", "moderate"),
+        ("2022-08-15", "2022-11-05", "major"),      # worst on record
+        ("2024-09-09", "2024-09-30", "major"),      # Maiduguri/Alau dam
+    ],
+    "GHA": [
+        ("2007-08-15", "2007-09-30", "major"),      # north/White Volta
+        ("2010-10-01", "2010-11-15", "moderate"),   # lower Volta
+        ("2015-06-01", "2015-06-15", "major"),      # Accra Jun 3 disaster
+        ("2023-09-15", "2023-10-31", "major"),      # Akosombo spill
+    ],
+    "CIV": [
+        ("2014-06-01", "2014-06-30", "moderate"),   # Abidjan
+        ("2018-06-15", "2018-06-30", "major"),      # Abidjan Jun 18-19
+        ("2020-06-15", "2020-07-05", "moderate"),
+    ],
+    "BEN": [
+        ("2010-09-01", "2010-10-31", "major"),      # Ouémé/Cotonou (worst)
+        ("2012-08-15", "2012-10-15", "moderate"),   # Niger valley
+        ("2022-09-15", "2022-10-20", "moderate"),   # Malanville crest
+    ],
 }
 
 # F5 (SCOPING-FLOODS §9): dated damage peaks per event, keyed by the
@@ -216,6 +308,63 @@ EVENT_PEAKS = {
         "2020-05-01": ("2020-05-08", "high"),  # Kasese/Kilembe flood
         "2022-07-15": ("2022-07-31", "med"),   # Mbale
     },
+    # --- P6 ---
+    "MOZ": {
+        "2000-01-25": ("2000-02-27", "high"),  # post-Eline Limpopo crest
+        "2001-01-15": ("2001-02-25", "low"),
+        "2007-01-01": ("2007-02-22", "med"),   # Favio landfall
+        "2013-01-10": ("2013-01-25", "high"),  # Chokwe inundation
+        "2015-01-05": ("2015-01-15", "high"),  # Licungo bridge/Mocuba
+        "2019-03-10": ("2019-03-15", "high"),  # Idai landfall at Beira
+        "2021-01-20": ("2021-01-23", "high"),  # Eloise landfall
+        "2023-02-10": ("2023-03-12", "med"),   # Freddy 2nd landfall
+    },
+    "MWI": {
+        "2015-01-09": ("2015-01-13", "high"),  # Shire disaster declaration
+        "2019-03-05": ("2019-03-08", "med"),
+        "2022-01-24": ("2022-01-25", "high"),  # Ana
+        "2023-03-11": ("2023-03-13", "high"),  # Freddy mudslides Blantyre
+    },
+    "MDG": {
+        "2004-03-05": ("2004-03-07", "high"),  # Gafilo landfall
+        "2007-03-10": ("2007-03-15", "med"),
+        "2012-02-10": ("2012-02-14", "high"),  # Giovanna landfall
+        "2015-01-15": ("2015-01-19", "high"),  # Chedza / Tana flooding
+        "2017-03-05": ("2017-03-07", "high"),  # Enawo landfall (SAVA)
+        "2018-01-03": ("2018-01-05", "med"),
+        "2022-01-17": ("2022-02-06", "high"),  # Batsirai landfall
+        "2023-02-19": ("2023-02-21", "high"),  # Freddy at Mananjary
+        "2024-03-25": ("2024-03-27", "med"),   # Gamane
+    },
+    "ZWE": {
+        "2000-02-22": ("2000-02-27", "med"),
+        "2017-02-15": ("2017-02-17", "high"),  # Dineo remnants
+        "2019-03-15": ("2019-03-16", "high"),  # Idai / Chimanimani night
+    },
+    "ZAF": {
+        "2000-02-05": ("2000-02-25", "med"),
+        "2019-04-18": ("2019-04-23", "high"),  # Durban Easter peak
+        "2022-04-11": ("2022-04-12", "high"),  # KZN deadliest day
+    },
+    "NGA": {
+        "2012-08-15": ("2012-09-29", "med"),   # Lokoja crest
+        "2018-08-15": ("2018-09-21", "low"),
+        "2022-08-15": ("2022-10-07", "med"),   # Lokoja/Bayelsa peak
+        "2024-09-09": ("2024-09-10", "high"),  # Alau dam collapse
+    },
+    "GHA": {
+        "2007-08-15": ("2007-09-12", "low"),
+        "2015-06-01": ("2015-06-03", "high"),  # Accra petrol-station fire
+        "2023-09-15": ("2023-10-16", "med"),   # Akosombo spill peak
+    },
+    "CIV": {
+        "2018-06-15": ("2018-06-19", "high"),  # Abidjan night floods
+    },
+    "BEN": {
+        "2010-09-01": ("2010-10-05", "med"),   # Cotonou peak inundation
+        "2022-09-15": ("2022-10-10", "low"),   # Malanville crest
+    },
+    "ZMB": {},   # Barotse flooding is slow-onset: no datable peaks
 }
 # live pentad publication latency subtracted for the "operational" lead
 LIVE_LATENCY_DAYS = 5
@@ -227,10 +376,28 @@ FLOOD_MONTHS = {
     "TZA": {1, 2, 3, 4, 5, 11, 12},         # Nov-May (uni/bimodal mix)
     "RWA": {3, 4, 5, 9, 10, 11, 12},        # two rainy seasons
     "UGA": {3, 4, 5, 7, 8, 9, 10, 11, 12},  # bimodal + Elgon/Rwenzori JJA
+    # P6: southern Africa cyclone/wet season; West Africa monsoon
+    "MOZ": {11, 12, 1, 2, 3, 4},
+    "MWI": {11, 12, 1, 2, 3, 4},
+    "MDG": {11, 12, 1, 2, 3, 4},
+    "ZMB": {11, 12, 1, 2, 3, 4},
+    "ZWE": {11, 12, 1, 2, 3, 4},
+    "ZAF": {10, 11, 12, 1, 2, 3, 4},        # KZN autumn events incl. Apr
+    "NGA": {6, 7, 8, 9, 10},
+    "GHA": {5, 6, 7, 8, 9, 10},
+    "CIV": {5, 6, 7, 9, 10},
+    "BEN": {6, 7, 8, 9, 10},
 }
 
 COUNTRY = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
-           "RWA": "Rwanda", "UGA": "Uganda"}
+           "RWA": "Rwanda", "UGA": "Uganda",
+           "MOZ": "Mozambique", "MWI": "Malawi", "MDG": "Madagascar",
+           "ZMB": "Zambia", "ZWE": "Zimbabwe", "ZAF": "South Africa",
+           "NGA": "Nigeria", "GHA": "Ghana", "CIV": "Côte d'Ivoire",
+           "BEN": "Benin"}
+
+# cyclone-belt countries: landfalling-system caveat printed on the panel
+CYCLONE_BELT = {"MOZ", "MWI", "MDG", "ZWE", "ZAF"}
 
 BASINS_GJ = pathlib.Path(__file__).resolve().parent.parent / \
     "data" / "zones" / "basins.geojson"

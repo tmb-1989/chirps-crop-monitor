@@ -66,6 +66,59 @@ BASINS = {
     # NB: Mbale (Nabuyonga/Namatala) shares the bas_elgon level-7 polygon —
     # already covered; the 2022 miss was signature, not coverage.
     "bas_semliki":   (1.00, 30.45, "Semliki flats (Ntoroko)", "UGA"),
+    # --- P6 extension: southern Africa (cyclone-season floods) ---
+    "bas_limpopo_low": (-24.53, 32.98, "Lower Limpopo (Chokwe/Xai-Xai)",
+                        "MOZ"),
+    "bas_zambezi_delta": (-17.83, 35.33, "Lower Zambezi (Caia/Marromeu)",
+                          "MOZ"),
+    "bas_pungwe":    (-19.30, 34.20, "Pungwe (Nhamatanda/Beira hinterland)",
+                      "MOZ"),
+    "bas_buzi":      (-20.00, 33.90, "Buzi valley", "MOZ"),
+    "bas_incomati":  (-25.05, 32.80, "Incomati (Magude/Xinavane)", "MOZ"),
+    "bas_licungo":   (-16.84, 36.99, "Licungo at Mocuba", "MOZ"),
+    "bas_shire_low": (-16.40, 34.95, "Lower Shire (Chikwawa/Nsanje)",
+                      "MWI"),
+    "bas_karonga":   (-9.93, 33.93, "Karonga lakeshore", "MWI"),
+    "bas_phalombe":  (-15.80, 35.65, "Phalombe plain / Mulanje foothills",
+                      "MWI"),
+    "bas_ikopa":     (-18.90, 47.52, "Ikopa / Antananarivo plain", "MDG"),
+    "bas_betsiboka_low": (-16.10, 46.63, "Lower Betsiboka (Marovoay)",
+                          "MDG"),
+    "bas_sava":      (-14.88, 50.00, "SAVA coast (Sambava/Antalaha)",
+                      "MDG"),
+    "bas_mananjary": (-21.22, 48.33, "Mananjary coast (cyclone belt)",
+                      "MDG"),
+    "bas_barotse":   (-15.25, 23.00, "Barotse floodplain (Mongu)", "ZMB"),
+    "bas_lusaka":    (-15.42, 28.28, "Lusaka urban", "ZMB"),
+    "bas_kafue_flats": (-15.75, 27.40, "Kafue flats (Mazabuka)", "ZMB"),
+    "bas_muzarabani": (-16.40, 31.00, "Muzarabani (lower Musengezi)",
+                       "ZWE"),
+    "bas_tsholotsho": (-19.77, 27.76, "Gwayi/Tsholotsho", "ZWE"),
+    "bas_chimanimani": (-19.80, 32.87, "Chimanimani (eastern highlands)",
+                        "ZWE"),
+    "bas_kzn_coast": (-29.80, 30.90, "KwaZulu-Natal coast (Mgeni/Durban)",
+                      "ZAF"),
+    "bas_luvuvhu":   (-22.75, 30.90, "Luvuvhu/Limpopo lowveld", "ZAF"),
+    "bas_jukskei":   (-26.05, 28.05, "Jukskei (Johannesburg/Alexandra)",
+                      "ZAF"),
+    # --- P6 extension: West Africa (monsoon floods) ---
+    "bas_lokoja":    (9.08, 6.73, "Niger-Benue confluence (Lokoja)",
+                      "NGA"),
+    "bas_benue_low": (7.73, 8.52, "Lower Benue (Makurdi)", "NGA"),
+    "bas_niger_delta": (4.92, 6.26, "Lower Niger (Bayelsa/Yenagoa)",
+                        "NGA"),
+    "bas_hadejia":   (12.45, 10.04, "Hadejia-Jama'are (Kano NE)", "NGA"),
+    "bas_maiduguri": (11.83, 13.15, "Ngadda at Maiduguri (Alau dam)",
+                      "NGA"),
+    "bas_white_volta": (10.90, -0.35, "White Volta (Bagre spill reach)",
+                        "GHA"),
+    "bas_accra":     (5.60, -0.22, "Odaw / Accra urban", "GHA"),
+    "bas_lower_volta": (6.00, 0.40, "Lower Volta (Akosombo spill reach)",
+                        "GHA"),
+    "bas_abidjan":   (5.37, -4.01, "Abidjan lagoon catchments", "CIV"),
+    "bas_bandama_low": (5.90, -4.82, "Lower Bandama (Tiassalé)", "CIV"),
+    "bas_oueme_low": (6.60, 2.47, "Lower Ouémé (Cotonou plain)", "BEN"),
+    "bas_niger_malanville": (11.85, 3.38, "Niger at Malanville", "BEN"),
 }
 
 # headwater -> downstream pairing with approximate routing lag (days)
@@ -93,6 +146,7 @@ def main() -> int:
             if g.contains(Point(lon, lat)):
                 d = dict(zip(fields, rec))
                 ds = DOWNSTREAM.get(key)
+                rp = g.representative_point()
                 feats.append({
                     "type": "Feature", "geometry": mapping(g),
                     "properties": {
@@ -102,6 +156,10 @@ def main() -> int:
                         "area_km2": round(d["SUB_AREA"]),
                         "downstream": ds[0] if ds else None,
                         "routing_days": ds[1] if ds else None,
+                        # app label/click anchor — the deployed app has
+                        # no shapely (added post-hoc before; now built in)
+                        "label_lon": round(rp.x, 4),
+                        "label_lat": round(rp.y, 4),
                     }})
                 found.add(key)
     missing = set(BASINS) - found

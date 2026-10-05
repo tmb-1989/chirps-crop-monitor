@@ -463,6 +463,11 @@ def _flood_section(_ciso):
     czones = [zk for zk, p in sorted(props.items()) if p["iso3"] == iso3]
 
     st.subheader(f"Flood watch — {COUNTRY[iso3]} basins")
+    if iso3 in getattr(_fsig, "CYCLONE_BELT", set()):
+        st.caption("⚠ Cyclone caveat (Idai/Freddy class): CHIRPS sees "
+                   "the rain only ~1–2 days ahead of a landfalling "
+                   "system — this layer flags rain-driven flooding, "
+                   "not storm surge or wind damage.")
     fs = load("SELECT * FROM flood_state WHERE zone_key IN (%s) "
               "ORDER BY granule_start" % ",".join("?" * len(czones)),
               tuple(czones))
