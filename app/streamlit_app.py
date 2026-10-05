@@ -631,7 +631,9 @@ def _flood_section(_ciso):
             x0 = hist.date.max() + pd.Timedelta(days=5)
             f.add_vrect(x0=x0, x1=x0 + pd.Timedelta(days=10),
                         fillcolor="gray", opacity=0.10, line_width=0)
-            wet_fc = gefs[gefs.pct_clim >= 150].index.tolist()
+            # this country's basins only — g10 spans every country
+            wet_fc = [z for z in gefs[gefs.pct_clim >= 150].index
+                      if z in blabel]
             f.add_annotation(
                 x=(x0 + pd.Timedelta(days=5)).isoformat(), y=1.05,
                 yref="paper", showarrow=False,
