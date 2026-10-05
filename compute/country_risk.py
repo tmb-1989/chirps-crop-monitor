@@ -405,21 +405,31 @@ def hydro_status(con, today: dt.date) -> dict:
     try:
         res = con.execute(
             "SELECT res_key, name, iso3, date, level_m, band_frac, "
-            "trend_8wk FROM live.reservoir_state").fetchall()
+            "trend_8wk, drawdown_m_wk, refill_date, proj_frac "
+            "FROM live.reservoir_state").fetchall()
     except Exception:  # table absent until gwm_levels.py runs
         res = []
-    for rk, name, iso, d, lvl, frac, trend in res:
+    for rk, name, iso, d, lvl, frac, trend, rate, rdate, pfrac in res:
         tr = "" if trend is None else f", {trend:+.1f}m/8wk"
         lab = f"{name} {lvl:.1f}m — {frac:.0%} of operating band{tr}"
+        # V3.3 drawdown monitor (Kariba-rule mirror): does the current
+        # 8-week drawdown rate reach the floor before the refill?
+        dd = ("" if pfrac is None else
+              f"; drawdown {rate:.2f} m/wk puts it at {pfrac:.0%} of "
+              f"the band at refill onset (~{rdate})")
         if _age(d, today) > 35:        # ~3 missed 10-day passes
             light = ("gray", f"{name}: altimetry stale (through {d})", d)
         elif frac < 0.10:
             light = ("red", f"{lab} — at minimum-operating-level "
                             "territory", d)
-        elif frac < 0.25:
-            light = ("yellow", f"{lab} — low on the band", d)
+        elif pfrac is not None and pfrac <= 0:
+            light = ("red", f"{lab}{dd} — ON PACE TO HIT MINIMUM "
+                            "OPERATING LEVEL BEFORE REFILL", d)
+        elif frac < 0.25 or (pfrac is not None and pfrac < 0.10):
+            light = ("yellow", f"{lab}{dd} — low on the band or "
+                               "drawdown pace threatens the floor", d)
         else:
-            light = ("green", lab, d)
+            light = ("green", lab + dd, d)
         per_c.setdefault(iso, []).append(light)
     # GERD has no public level feed (SCOPING-HYDRO-LEVELS): say so
     # rather than letting the rainfall proxy stand in silently

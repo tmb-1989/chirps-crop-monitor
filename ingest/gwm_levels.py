@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS reservoir_levels (
     mission   TEXT,
     PRIMARY KEY (res_key, date)
 );
-CREATE TABLE IF NOT EXISTS live.reservoir_state (
+DROP TABLE IF EXISTS live.reservoir_state;  -- derived, replaced per run
+CREATE TABLE live.reservoir_state (
     res_key    TEXT PRIMARY KEY,
     name       TEXT,
     iso3       TEXT,
@@ -73,10 +74,60 @@ CREATE TABLE IF NOT EXISTS live.reservoir_state (
     fsl_m      REAL,
     band_frac  REAL,                 -- (level-MOL)/(FSL-MOL)
     trend_8wk  REAL,                 -- level change over ~8 weeks (m)
+    -- V3.3 drawdown monitor (mirrors the Kariba drawdown rule):
+    drawdown_m_wk REAL,              -- 8-week linear rate (+=falling)
+    refill_doy REAL,                 -- climatological refill onset
+    refill_date TEXT,                -- next onset after `date`
+    weeks_to_refill REAL,
+    proj_level_m REAL,               -- level projected at refill onset
+    proj_frac  REAL,                 -- band position at refill onset
     anchor_note TEXT,
     fetched_at TEXT
 );
 """
+
+
+def refill_onset_doy(rows: list[tuple[str, float, str]]) -> float | None:
+    """Climatological refill onset = circular median day-of-year of the
+    annual minimum level (the trough is where drawdown ends and refill
+    begins). Circular mean handles southern reservoirs whose trough
+    straddles the new year."""
+    import math
+    mins: dict[int, tuple[float, int]] = {}
+    for d, v, _ in rows:
+        dd = dt.date.fromisoformat(d)
+        # hydrological year: shift by 6 months so a Dec-Jan trough
+        # lands mid-"year" and min() is well defined per year
+        hy = (dd + dt.timedelta(days=182)).year
+        doy = dd.timetuple().tm_yday
+        if hy not in mins or v < mins[hy][0]:
+            mins[hy] = (v, doy)
+    doys = [doy for _, doy in mins.values()]
+    if len(doys) < 5:
+        return None
+    ang = [2 * math.pi * d / 365.25 for d in doys]
+    x = sum(math.cos(a) for a in ang) / len(ang)
+    y = sum(math.sin(a) for a in ang) / len(ang)
+    mean = math.atan2(y, x) % (2 * math.pi)
+    return mean * 365.25 / (2 * math.pi)
+
+
+def drawdown_rate(rows: list[tuple[str, float, str]]) -> float | None:
+    """8-week least-squares slope, meters per week (positive = falling)."""
+    last = dt.date.fromisoformat(rows[-1][0])
+    pts = [((dt.date.fromisoformat(d) - last).days / 7.0, v)
+           for d, v, _ in rows
+           if (last - dt.date.fromisoformat(d)).days <= 56]
+    if len(pts) < 4:
+        return None
+    n = len(pts)
+    mx = sum(p[0] for p in pts) / n
+    my = sum(p[1] for p in pts) / n
+    den = sum((p[0] - mx) ** 2 for p in pts)
+    if den < 1e-9:
+        return None
+    slope = sum((p[0] - mx) * (p[1] - my) for p in pts) / den
+    return -slope  # positive = falling
 
 
 def parse_target(text: str) -> list[tuple[str, float, str]]:
@@ -128,19 +179,44 @@ def main() -> int:
                 "INSERT OR REPLACE INTO reservoir_levels VALUES (?,?,?,?)",
                 [(rk, d, v, mi) for d, v, mi in rows])
             d_last, lvl, _ = rows[-1]
-            cut = (dt.date.fromisoformat(d_last)
-                   - dt.timedelta(days=56)).isoformat()
+            dd_last = dt.date.fromisoformat(d_last)
+            cut = (dd_last - dt.timedelta(days=56)).isoformat()
             older = [v for d, v, _ in rows if d <= cut]
             trend = lvl - older[-1] if older else None
             frac = (lvl - mol) / (fsl - mol)
+            # V3.3 drawdown monitor: project the current rate forward
+            # to the climatological refill onset (Kariba-rule mirror)
+            rate = drawdown_rate(rows)
+            rdoy = refill_onset_doy(rows)
+            rdate = wks = proj = pfrac = None
+            if rdoy is not None:
+                rdate = dt.date(dd_last.year, 1, 1) + \
+                    dt.timedelta(days=rdoy - 1)
+                if rdate <= dd_last:
+                    rdate = dt.date(dd_last.year + 1, 1, 1) + \
+                        dt.timedelta(days=rdoy - 1)
+                wks = (rdate - dd_last).days / 7.0
+                if rate is not None and rate > 0:
+                    proj = lvl - rate * wks
+                    pfrac = (proj - mol) / (fsl - mol)
             con.execute(
                 "INSERT OR REPLACE INTO live.reservoir_state VALUES "
-                "(?,?,?,?,?,?,?,?,?,?,?)",
+                "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (rk, name, iso3, d_last, lvl, mol, fsl, round(frac, 3),
-                 None if trend is None else round(trend, 2), note, now))
+                 None if trend is None else round(trend, 2),
+                 None if rate is None else round(rate, 3),
+                 None if rdoy is None else round(rdoy, 1),
+                 None if rdate is None else rdate.isoformat(),
+                 None if wks is None else round(wks, 1),
+                 None if proj is None else round(proj, 2),
+                 None if pfrac is None else round(pfrac, 3),
+                 note, now))
             print(f"[{rk}] {len(rows)} obs; latest {d_last} {lvl:.2f}m "
                   f"({frac:.0%} of band"
                   + (f", {trend:+.2f}m/8wk" if trend is not None else "")
+                  + (f"; drawdown {rate:.2f}m/wk -> {pfrac:.0%} of band "
+                     f"at refill ~{rdate}" if pfrac is not None else
+                     f"; refill ~{rdate}" if rdate else "")
                   + ")")
     con.commit()
     con.close()

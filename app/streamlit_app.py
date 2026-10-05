@@ -842,7 +842,7 @@ def _reservoir_block(_ciso):
     if rs.empty:
         return False
     for _, r in rs.iterrows():
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         c1.metric(r["name"], f"{r.level_m:.1f} m",
                   f"as of {r.date} (satellite altimetry)")
         c2.metric("Position on operating band", f"{r.band_frac:.0%}",
@@ -850,6 +850,16 @@ def _reservoir_block(_ciso):
         c3.metric("8-week trend",
                   "—" if pd.isna(r.trend_8wk) else f"{r.trend_8wk:+.2f} m",
                   "rising" if (r.trend_8wk or 0) > 0 else "falling")
+        # V3.3 drawdown monitor: band position projected at refill onset
+        if not pd.isna(r.get("proj_frac", float("nan"))):
+            c4.metric(f"At refill onset (~{r.refill_date})",
+                      f"{r.proj_frac:.0%} of band",
+                      f"drawdown {r.drawdown_m_wk:.2f} m/wk",
+                      delta_color="inverse" if r.proj_frac < 0.25
+                      else "off")
+        elif isinstance(r.get("refill_date"), str):
+            c4.metric("Refill onset (climatological)", r.refill_date,
+                      "level currently rising")
         hist = load("SELECT date, level_m FROM reservoir_levels WHERE "
                     "res_key=? ORDER BY date", (r.res_key,))
         if not hist.empty:
@@ -858,6 +868,13 @@ def _reservoir_block(_ciso):
             fr.add_scatter(x=hist.date, y=hist.level_m, mode="lines",
                            line=dict(color="#2b6ca3", width=1.4),
                            name="level")
+            # drawdown projection to the climatological refill onset
+            if not pd.isna(r.get("proj_frac", float("nan"))):
+                fr.add_scatter(
+                    x=[pd.Timestamp(r.date), pd.Timestamp(r.refill_date)],
+                    y=[r.level_m, r.proj_level_m], mode="lines",
+                    line=dict(color="#c0392b", width=1.6, dash="dot"),
+                    name="drawdown pace to refill onset")
             fr.add_hline(y=r.mol_m, line_dash="dot", line_color="crimson",
                          annotation_text="min operating level",
                          annotation_font=dict(size=10, color="crimson"))
@@ -872,9 +889,14 @@ def _reservoir_block(_ciso):
                            font=dict(size=13)))
             st.plotly_chart(fr, use_container_width=True)
         st.caption(f"Anchors: {r.anchor_note}. Red below 10% of the "
-                   "band, yellow below 25%. Source: NASA GWM radar "
-                   "altimetry (TOPEX→Sentinel-6A, ~10-day cadence, "
-                   "fetched on dekad days).")
+                   "band, yellow below 25%. Drawdown monitor (Kariba-"
+                   "rule mirror): the 8-week rate projected to the "
+                   "climatological refill onset (median date of the "
+                   "annual trough in this series) — red when the pace "
+                   "reaches minimum operating level before the refill, "
+                   "yellow when it lands below 10% of the band. Source: "
+                   "NASA GWM radar altimetry (TOPEX→Sentinel-6A, "
+                   "~10-day cadence, fetched on dekad days).")
     return True
 
 
@@ -999,7 +1021,8 @@ def _hydro_section(_ciso):
 # ======================== COUNTRY TAB =====================
 import json as _json  # noqa: E402
 
-_iso_opts = [c for c in NAMES_CR if c in set(zones.iso3)]
+_iso_opts = sorted((c for c in NAMES_CR if c in set(zones.iso3)),
+                   key=lambda c: NAMES_CR.get(c, c))
 _ciso = st.sidebar.selectbox("Country", _iso_opts,
                              format_func=lambda c: NAMES_CR.get(c, c))
 _czones = zones[zones.iso3 == _ciso]
