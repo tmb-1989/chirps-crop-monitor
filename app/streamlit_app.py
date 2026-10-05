@@ -216,26 +216,37 @@ if view == "Overview":
                ("drought", "Drought"), ("export", "Export crops"),
                ("flood", "Flood"), ("hydro", "Hydropower")]
 
+    # compact HTML board: lights only, the reason appears on hover
+    # (title attribute) — the full-text table outgrew the screen
+    import html as _html
     cell = {(r.country, r.factor): r for _, r in cr.iterrows()}
-    rows, fills = [], []
+    head = "".join(f"<th style='padding:6px 10px;text-align:center;"
+                   f"font-weight:600'>{label}</th>"
+                   for _, label in FACTORS)
+    body = []
     for c in NAMES_CR:
-        row, frow = {"Country": NAMES_CR[c]}, {"Country": ""}
+        tds = [f"<td style='padding:6px 10px;white-space:nowrap'>"
+               f"{NAMES_CR[c]}</td>"]
         for fac, label in FACTORS:
             r = cell.get((c, fac))
             if r is None:
-                row[label], frow[label] = "⚪ —", FILL["gray"]
+                dot, fill, tip = "⚪", FILL["gray"], "no data"
             else:
-                row[label] = f"{DOT[r.status]} {r.reason or ''}"
-                frow[label] = FILL[r.status]
-        rows.append(row)
-        fills.append(frow)
-    tbl = pd.DataFrame(rows)
-    fill_df = pd.DataFrame(fills)
-    styled = tbl.style.apply(
-        lambda col: [f"background-color: {fill_df.loc[i, col.name]}"
-                     for i in col.index], axis=0)
-    st.dataframe(styled, hide_index=True, use_container_width=True,
-                 height=430)
+                dot, fill = DOT[r.status], FILL[r.status]
+                tip = f"{r.reason or ''}" + \
+                    (f"  (as of {r.as_of})" if r.as_of else "")
+            tds.append(
+                f"<td title=\"{_html.escape(tip, quote=True)}\" "
+                f"style='background:{fill};text-align:center;"
+                f"padding:6px 10px;font-size:15px;cursor:default'>"
+                f"{dot}</td>")
+        body.append("<tr>" + "".join(tds) + "</tr>")
+    st.markdown(
+        "<table style='border-collapse:collapse;width:100%'>"
+        f"<tr><th style='text-align:left;padding:6px 10px'>Country</th>"
+        f"{head}</tr>" + "".join(body) + "</table>",
+        unsafe_allow_html=True)
+    st.caption("Hover a light for the reason behind it.")
 
     ts = cr.computed_at.max()
     age_h = (pd.Timestamp.now(tz="UTC") - pd.Timestamp(ts)).total_seconds() \
@@ -618,6 +629,83 @@ def _flood_section(_ciso):
                         "Flood risk timeline — last 12 months",
                         show_bursts=True, gefs=g10),
         use_container_width=True)
+
+    # ---- current basin-state map (mirrors the WRSI country map) ---------
+    def _basin_color(row):
+        if row is None:
+            return "#d8d8d8", "no data"
+        if row.tier >= 2:
+            return "#d95f4b", "basin flood ALERT"
+        if row.tier >= 1:
+            return "#ec9b3b", "armed / watch"
+        if (row.pct_normal or 0) >= 150:
+            return "#e8c84d", "rainfall burst ≥150% of normal"
+        return "#a8c6e4", "quiet"
+
+    fb = go.Figure()
+    _oc = _dbdir.parent / "data/zones/country_outlines.geojson"
+    if _oc.exists():
+        for f in _json.loads(_oc.read_text())["features"]:
+            if f["properties"]["iso3"] != iso3:
+                continue
+            pls = f["geometry"]["coordinates"]
+            if f["geometry"]["type"] == "Polygon":
+                pls = [pls]
+            for rings in pls:
+                fb.add_scatter(x=[q[0] for q in rings[0]],
+                               y=[q[1] for q in rings[0]],
+                               mode="lines", name="",
+                               line=dict(color="#9a9a9a", width=1),
+                               fill="toself", fillcolor="#f4f1ea",
+                               hoverinfo="skip", showlegend=False)
+    _bx, _by, _bt = [], [], []
+    for f in gj["features"]:
+        p = f["properties"]
+        if p["iso3"] != iso3:
+            continue
+        zk = p["zone_key"]
+        row = cur.loc[zk] if zk in cur.index else None
+        fc, state = _basin_color(row)
+        tip = (f"<b>{p.get('name', zk)}</b><br>{state}"
+               + ("" if row is None else
+                  f"<br>catchment wetness: {row.ante_pct:.0f}th pctile"
+                  f"<br>pentad rain: {row.pct_normal:.0f}% of normal"
+                  + (f"<br>signature: {row.signature}"
+                     if row.signature else ""))
+               + "<extra></extra>")
+        pls = f["geometry"]["coordinates"]
+        if f["geometry"]["type"] == "Polygon":
+            pls = [pls]
+        for rings in pls:
+            fb.add_scatter(x=[q[0] for q in rings[0]],
+                           y=[q[1] for q in rings[0]],
+                           mode="lines", fill="toself", fillcolor=fc,
+                           opacity=0.8, name="",
+                           line=dict(color="white", width=0.7),
+                           hovertemplate=tip, showlegend=False)
+        _bx.append(p.get("label_lon"))
+        _by.append(p.get("label_lat"))
+        _bt.append("" if row is None or pd.isna(row.ante_pct)
+                   else f"{row.ante_pct:.0f}")
+    fb.add_scatter(x=_bx, y=_by, mode="text", text=_bt, name="",
+                   textfont=dict(size=10, color="#1f2733"),
+                   hoverinfo="skip", showlegend=False)
+    _reg_sfx = "  —  🔴 REGIONAL ALERT ACTIVE" if regional else ""
+    fb.update_layout(
+        height=480, margin=dict(l=0, r=0, t=30, b=0),
+        title=dict(text="Current basin state (numbers = catchment "
+                        f"wetness percentile){_reg_sfx}",
+                   font=dict(size=13)),
+        xaxis=dict(visible=False),
+        yaxis=dict(visible=False, scaleanchor="x"),
+        plot_bgcolor="white", dragmode="pan")
+    st.plotly_chart(fb, use_container_width=True)
+    st.caption("🔴 red = basin flood alert · 🟠 orange = armed/watch "
+               "(saturated catchment) · 🟡 gold = rainfall burst ≥150% "
+               "of normal this pentad · 🔵 blue = quiet · gray = no "
+               "data. Hover a basin for detail; the regional alert "
+               "requires multiple basins armed/alerting in season.")
+
     with st.expander("Full history 1998–2026 — every documented flood vs "
                      "the signal record"):
         st.plotly_chart(
