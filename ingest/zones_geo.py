@@ -103,9 +103,14 @@ def main() -> int:
             geom = clip_to_crop_footprint(geom, EXPORT_CROP[zone_key])
             print(f"  {zone_key}: clipped {raw:.2f} -> {geom.area:.2f} deg2")
         geoms[zone_key] = geom
+        pt = geom.representative_point()
         feats.append({"type": "Feature", "geometry": mapping(geom),
                       "properties": {"zone_key": zone_key, "iso3": iso3,
-                                     "name": name}})
+                                     "name": name,
+                                     # app label/click anchor — the
+                                     # deployed app has no shapely
+                                     "label_lon": round(pt.x, 4),
+                                     "label_lat": round(pt.y, 4)}})
         print(f"{zone_key}: {geom.geom_type}, area {geom.area:.2f} deg2")
     for ckey, (iso3, name, members) in COMPOSITES.items():
         geom = unary_union([geoms[m] for m in members])

@@ -1071,12 +1071,18 @@ for f in _zgj["features"]:
 # clicking a polygon interior does not emit a plotly point selection,
 # clicking the (invisible) centroid marker does
 if _map_zones:
-    from shapely.geometry import shape as _shape  # noqa: E402
+    # label points precomputed by ingest/zones_geo.py — the deployed
+    # app must not import shapely (not in requirements.txt)
     _cx, _cy, _ct, _ck, _ch = [], [], [], [], []
     for zk, f, w, hover in _map_zones:
-        pt = _shape(f["geometry"]).representative_point()
-        _cx.append(pt.x)
-        _cy.append(pt.y)
+        p = f["properties"]
+        ring = f["geometry"]["coordinates"][0]
+        if f["geometry"]["type"] == "MultiPolygon":
+            ring = ring[0]
+        _cx.append(p.get("label_lon",
+                         sum(q[0] for q in ring) / len(ring)))
+        _cy.append(p.get("label_lat",
+                         sum(q[1] for q in ring) / len(ring)))
         _ct.append("" if w is None or pd.isna(w) else f"{w:.0f}")
         _ck.append(zk)
         _ch.append(hover)
