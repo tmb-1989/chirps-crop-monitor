@@ -220,9 +220,22 @@ if view == "Overview":
     # (title attribute) — the full-text table outgrew the screen
     import html as _html
     cell = {(r.country, r.factor): r for _, r in cr.iterrows()}
-    head = "".join(f"<th style='padding:6px 10px;text-align:center;"
-                   f"font-weight:600'>{label}</th>"
-                   for _, label in FACTORS)
+    # two header rows: Drought spans its Staple/Export sub-columns
+    _th = ("<th style='padding:6px 10px;text-align:center;"
+           "font-weight:600;vertical-align:bottom'{attrs}>{label}</th>")
+    head_top = (
+        "<th rowspan=2 style='text-align:left;padding:6px 10px;"
+        "vertical-align:bottom'>Country</th>"
+        + _th.format(attrs=" rowspan=2", label="El Niño / ENSO")
+        + _th.format(attrs=" rowspan=2", label="Indian Ocean Dipole")
+        + _th.format(attrs=" colspan=2", label="Drought")
+        + _th.format(attrs=" rowspan=2", label="Flood")
+        + _th.format(attrs=" rowspan=2", label="Hydropower"))
+    head_sub = (
+        "<th style='padding:2px 10px;text-align:center;font-weight:400;"
+        "font-size:12px;color:#5b6470'>staple crops</th>"
+        "<th style='padding:2px 10px;text-align:center;font-weight:400;"
+        "font-size:12px;color:#5b6470'>export crops</th>")
     body = []
     for c in NAMES_CR:
         tds = [f"<td style='padding:6px 10px;white-space:nowrap'>"
@@ -243,8 +256,8 @@ if view == "Overview":
         body.append("<tr>" + "".join(tds) + "</tr>")
     st.markdown(
         "<table style='border-collapse:collapse;width:100%'>"
-        f"<tr><th style='text-align:left;padding:6px 10px'>Country</th>"
-        f"{head}</tr>" + "".join(body) + "</table>",
+        f"<tr>{head_top}</tr><tr>{head_sub}</tr>"
+        + "".join(body) + "</table>",
         unsafe_allow_html=True)
     st.caption("Hover a light for the reason behind it.")
 
