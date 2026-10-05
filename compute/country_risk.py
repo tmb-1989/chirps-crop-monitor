@@ -306,20 +306,21 @@ def iod_status(con, today: dt.date) -> dict:
     return out
 
 
-def hydro_status(con, today: dt.date) -> dict:
-    """iso3 -> (status, reason, as_of). Zambia only for now, from the
-    Kariba level/drawdown monitor; other countries gray until their
-    stations are wired in."""
-    out = {c: ("gray", "no hydropower monitor for this country", None)
-           for c in ORDER}
+# V2.4 inflow-proxy thresholds (compute/hydro_signal.py). In season the
+# trailing 3-month rainfall percentile leads; out of season the last
+# completed wet season's % of normal carries the refill verdict.
+HYDRO_TRAIL = {"red": 10, "yellow": 25}
+HYDRO_REFILL = {"red": 60, "yellow": 80}
+
+
+def _kariba_light(con, today: dt.date):
+    """(status, reason, as_of) from the live Kariba level monitor."""
     s = kariba.latest_state(con)
     if not s:
-        out["ZMB"] = ("gray", "no Kariba data — run ingest/kariba.py", None)
-        return out
+        return ("gray", "no Kariba data — run ingest/kariba.py", None)
     if _age(s["date"], today) > STALE["kariba"]:
-        out["ZMB"] = ("gray", f"Kariba data stale (through {s['date']})",
-                      s["date"])
-        return out
+        return ("gray", f"Kariba data stale (through {s['date']})",
+                s["date"])
     lvl, pct, rate = s["level_m"], s["pct_full"], s["drawdown_m_wk"]
     desc = f"Kariba {lvl:.2f}m" + \
         (f", {pct:.0f}% usable" if pct is not None else "") + \
@@ -327,15 +328,87 @@ def hydro_status(con, today: dt.date) -> dict:
     if (lvl < KARIBA_RED["level_m"]
             or (pct is not None and pct < KARIBA_RED["pct_full"])
             or (rate is not None and rate >= KARIBA_RED["rate"])):
-        out["ZMB"] = ("red", f"{desc} — severe-rationing boundary in play",
-                      s["date"])
-    elif (lvl < KARIBA_YEL["level_m"]
+        return ("red", f"{desc} — severe-rationing boundary in play",
+                s["date"])
+    if (lvl < KARIBA_YEL["level_m"]
             or (pct is not None and pct < KARIBA_YEL["pct_full"])
             or (rate is not None and rate >= KARIBA_YEL["rate"])):
-        out["ZMB"] = ("yellow", f"{desc} — approaching rationing "
-                                "thresholds", s["date"])
-    else:
-        out["ZMB"] = ("green", desc, s["date"])
+        return ("yellow", f"{desc} — approaching rationing thresholds",
+                s["date"])
+    return ("green", desc, s["date"])
+
+
+def _catchment_light(r, today: dt.date):
+    """(status, reason) from one live.hydro_catchment row (V2.4).
+    Rainfall proxy only — says what fell on the catchment, not what the
+    reservoir holds."""
+    name = r["name"]
+    if _age(r["as_of"], today) > STALE["wrsi"]:
+        return ("gray", f"{name}: catchment rainfall stale "
+                        f"(through {r['as_of']})")
+    if r["in_season"]:
+        tp = r["trail_pct"]
+        if tp is None:
+            return ("gray", f"{name}: trailing-rain percentile not yet "
+                            "computable")
+        lab = (f"{name}: 3-month catchment rain p{tp:.0f}"
+               f" ({r['trail_mm']:.0f}mm), season {r['season_label']} "
+               f"{r['season_pct_normal']:.0f}% of normal"
+               if r["season_pct_normal"] is not None else
+               f"{name}: 3-month catchment rain p{tp:.0f}")
+        if tp <= HYDRO_TRAIL["red"]:
+            return ("red", f"{lab} — inflow-side drought")
+        if tp <= HYDRO_TRAIL["yellow"]:
+            return ("yellow", f"{lab} — inflow watch")
+        return ("green", lab)
+    spn = r["season_pct_normal"]
+    if spn is None:
+        return ("gray", f"{name}: no completed-season total yet")
+    lab = (f"{name}: last wet season ({r['season_label'].replace(' final', '')}) "
+           f"{spn:.0f}% of normal — dry-season carryover")
+    if spn < HYDRO_REFILL["red"]:
+        return ("red", f"{lab}; refill failure")
+    if spn < HYDRO_REFILL["yellow"]:
+        return ("yellow", f"{lab}; below-normal refill")
+    return ("green", lab)
+
+
+def hydro_status(con, today: dt.date) -> dict:
+    """iso3 -> (status, reason, as_of). Kariba keeps its live
+    level/drawdown monitor (ZMB and ZWE); V2.4 adds a rainfall-side
+    inflow proxy for every monitored catchment. A country's light is
+    the worst of its catchments (plus the Kariba level where it
+    applies); reasons name the tripping catchment."""
+    out = {c: ("gray", "no hydropower monitor for this country", None)
+           for c in ORDER}
+    try:
+        cat = con.execute(
+            "SELECT zone_key, name, countries, as_of, in_season, trail_mm, "
+            "trail_pct, season_pct_normal, season_label "
+            "FROM live.hydro_catchment").fetchall()
+        cols = ["zone_key", "name", "countries", "as_of", "in_season",
+                "trail_mm", "trail_pct", "season_pct_normal",
+                "season_label"]
+        cat = [dict(zip(cols, r)) for r in cat]
+    except Exception:  # table absent until compute/hydro_signal.py runs
+        cat = []
+    per_c: dict = {}
+    for r in cat:
+        st, reason = _catchment_light(r, today)
+        for iso in r["countries"].split(","):
+            per_c.setdefault(iso, []).append((st, reason, r["as_of"]))
+    klight = _kariba_light(con, today)
+    for iso in ("ZMB", "ZWE"):
+        per_c.setdefault(iso, []).append(klight)
+    for iso, lights in per_c.items():
+        if iso not in out:
+            continue
+        worst = max(lights, key=lambda x: RANK.get(x[0], -1))
+        others = [x for x in lights if x is not worst]
+        tail = (f" (+{len(others)} other monitor(s) "
+                f"{'/'.join(sorted({o[0] for o in others}))})"
+                if others else "")
+        out[iso] = (worst[0], worst[1] + tail, worst[2])
     return out
 
 

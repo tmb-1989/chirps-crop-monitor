@@ -772,11 +772,73 @@ def _flood_section(_ciso):
 
 
 # ======================== HYDRO SECTION (Country tab) =====
+def _catchment_block(_ciso):
+    """V2.4: per-catchment inflow proxy — catchment rainfall, not
+    reservoir contents. Shown for every country a catchment lights."""
+    try:
+        hc = load("SELECT * FROM hydro_catchment")
+    except Exception:
+        return False
+    hc = hc[hc.countries.str.split(",").apply(lambda cs: _ciso in cs)] \
+        if not hc.empty else hc
+    if hc.empty:
+        return False
+    for _, r in hc.iterrows():
+        tp = ("—" if pd.isna(r.trail_pct)
+              else f"p{r.trail_pct:.0f}")
+        spn = ("—" if pd.isna(r.season_pct_normal)
+               else f"{r.season_pct_normal:.0f}%")
+        c1, c2, c3 = st.columns(3)
+        c1.metric(r["name"], f"{r.trail_mm:.0f} mm",
+                  "trailing 3-month catchment rain")
+        c2.metric("vs same window, all years", tp,
+                  "percentile (p50 = normal)")
+        c3.metric(f"Season {r.season_label}", spn, "of 1991–2020 normal")
+        # 24 months of catchment dekad rainfall vs climatology
+        cr = load("SELECT granule_start, value FROM observations WHERE "
+                  "zone_key=? AND dataset IN ('chirps3local_dekad_data',"
+                  "'chirps3local-prelim_dekad_data') "
+                  "ORDER BY granule_start", (r.zone_key,))
+        if not cr.empty:
+            cr["granule_start"] = pd.to_datetime(cr.granule_start)
+            cr["dkey"] = cr.granule_start.dt.month * 3 + \
+                (cr.granule_start.dt.day - 1) // 10
+            clim = cr[(cr.granule_start.dt.year >= 1991) &
+                      (cr.granule_start.dt.year <= 2020)] \
+                .groupby("dkey").value.mean()
+            recent = cr[cr.granule_start >=
+                        cr.granule_start.max() - pd.Timedelta(days=730)]
+            fh = go.Figure()
+            fh.add_bar(x=recent.granule_start, y=recent.value,
+                       name="dekad rain", marker_color="#4a8fc7")
+            fh.add_scatter(x=recent.granule_start,
+                           y=[clim.get(k) for k in recent.dkey],
+                           name="1991–2020 mean", mode="lines",
+                           line=dict(color="gray", dash="dash"))
+            fh.update_layout(height=240, margin=dict(t=30, b=0),
+                             title=dict(text=f"{r['name']} — catchment "
+                                        "rainfall, last 24 months (mm/dekad)",
+                                        font=dict(size=13)),
+                             legend=dict(orientation="h", y=-0.2))
+            st.plotly_chart(fh, use_container_width=True)
+    st.caption("Inflow proxy only: this is rainfall over the drainage "
+               "area upstream of the dam (HydroBASINS level-7 union), "
+               "not reservoir contents — only Kariba has a live level "
+               "feed. In season the trailing 3-month percentile leads "
+               "the light (≤p25 watch, ≤p10 inflow drought); out of "
+               "season the last completed wet season's % of normal "
+               "carries the refill verdict (<80% below-normal, <60% "
+               "refill failure).")
+    return True
+
+
 def _hydro_section(_ciso):
     st.divider()
     st.header("Hydropower")
+    _has_cat = _catchment_block(_ciso)
     if _ciso != "ZMB":
-        st.info("No hydropower monitor for this country — Kariba (Zambia) only; the seven-dam catchment expansion is scoped as P5.")
+        if not _has_cat:
+            st.info("No hydropower monitor for this country.")
         return
     st.subheader("Hydropower — Lake Kariba (Zambia)")
     hy = load("SELECT status, reason, as_of FROM country_risk WHERE "
@@ -924,6 +986,11 @@ _cbasins = []
 if _bgj_path.exists():
     _cbasins = [f for f in _json.loads(_bgj_path.read_text())["features"]
                 if f["properties"].get("iso3") == _ciso]
+_cat_path = _dbdir.parent / "data/zones/catchments.geojson"
+_ccatch = []
+if _cat_path.exists():
+    _ccatch = [f for f in _json.loads(_cat_path.read_text())["features"]
+               if _ciso in f["properties"]["countries"].split(",")]
 _lc1, _lc2 = st.columns([3, 2])
 with _lc1:
     _crop_opts = ["All crops", "Staple only"] + \
@@ -932,14 +999,14 @@ with _lc1:
                            label_visibility="collapsed",
                            key=f"lyr_crop_{_ciso}")
 with _lc2:
-    if _cbasins:
-        _show_flood = st.checkbox("Overlay flood basins", value=False,
-                                  key=f"lyr_flood_{_ciso}")
-    else:
-        _show_flood = False
-        st.caption("No flood layer for this country" +
-                   (" — hydro catchments arrive with P5"
-                    if _ciso == "ZMB" else ""))
+    _show_flood = st.checkbox("Overlay flood basins", value=False,
+                              key=f"lyr_flood_{_ciso}") \
+        if _cbasins else False
+    _show_hydro = st.checkbox("Overlay hydro catchments", value=False,
+                              key=f"lyr_hydro_{_ciso}") \
+        if _ccatch else False
+    if not _cbasins and not _ccatch:
+        st.caption("No flood or hydro layer for this country")
 
 fmap = go.Figure()
 _cn_bounds = None
@@ -1054,6 +1121,66 @@ if _show_flood:
                 name="", line=dict(color="#4a6fa5", width=1),
                 hovertemplate=hover, showlegend=False)
 
+# hydro-catchment overlay: inflow-proxy state over the crop zones
+if _show_hydro:
+    try:
+        _hcs = load("SELECT * FROM hydro_catchment").set_index("zone_key")
+    except Exception:
+        _hcs = pd.DataFrame()
+
+    def _hc_color(r):
+        """Mirror compute/country_risk._catchment_light thresholds."""
+        if r is None:
+            return "#d8d8d8", "no inflow data yet"
+        if r.in_season:
+            if pd.isna(r.trail_pct):
+                return "#d8d8d8", "percentile not yet computable"
+            if r.trail_pct <= 10:
+                return "#d95f4b", "inflow-side drought (≤p10)"
+            if r.trail_pct <= 25:
+                return "#ec9b3b", "inflow watch (≤p25)"
+            return "#79c47e", "inflow normal"
+        if pd.isna(r.season_pct_normal):
+            return "#d8d8d8", "no completed-season total yet"
+        if r.season_pct_normal < 60:
+            return "#d95f4b", "refill failure last wet season"
+        if r.season_pct_normal < 80:
+            return "#ec9b3b", "below-normal refill"
+        return "#79c47e", "normal refill — dry-season carryover"
+
+    for f in _ccatch:
+        p = f["properties"]
+        zk = p["zone_key"]
+        r = _hcs.loc[zk] if zk in getattr(_hcs, "index", []) else None
+        fc, hlab = _hc_color(r)
+        hover = (f"<b>{p['name']}</b> — {hlab}<br>{p['plant']}<br>"
+                 + ("" if r is None else
+                    (f"3-month rain {r.trail_mm:.0f}mm"
+                     + ("" if pd.isna(r.trail_pct)
+                        else f" (p{r.trail_pct:.0f})") + "<br>"
+                     + ("" if pd.isna(r.season_pct_normal) else
+                        f"season {r.season_label}: "
+                        f"{r.season_pct_normal:.0f}% of normal<br>")))
+                 + f"{p['area_km2']:,} km² upstream of the dam"
+                 + "<extra></extra>")
+        polys = f["geometry"]["coordinates"]
+        if f["geometry"]["type"] == "Polygon":
+            polys = [polys]
+        for rings in polys:
+            fmap.add_scatter(
+                x=[pt[0] for pt in rings[0]],
+                y=[pt[1] for pt in rings[0]],
+                mode="lines", fill="toself", fillcolor=fc, opacity=0.35,
+                name="", line=dict(color="#2b6ca3", width=1.4,
+                                   dash="dash"),
+                hovertemplate=hover, showlegend=False)
+        fmap.add_scatter(
+            x=[p["dam_lon"]], y=[p["dam_lat"]], mode="markers+text",
+            marker=dict(symbol="square", size=9, color="#1a2f6b"),
+            text=[p["name"].split(" (")[0]], textposition="bottom center",
+            textfont=dict(size=10, color="#1a2f6b"),
+            hovertemplate=hover, showlegend=False)
+
 # centroid markers: the WRSI value labels AND fat click targets —
 # clicking a polygon interior does not emit a plotly point selection,
 # clicking the (invisible) centroid marker does
@@ -1103,7 +1230,11 @@ st.caption("Shading mirrors the WRSI chart bands: green ≥95, gold 80–94, "
            "edges mark export belts (clipped to their GAEZ crop "
            "footprint). Hover for SPI-3, soil moisture and season."
            + (" Flood overlay: blue quiet, gold heavy pentad, orange "
-              "armed, red alerting." if _show_flood else ""))
+              "armed, red alerting." if _show_flood else "")
+           + (" Hydro overlay (dashed): catchment upstream of the dam, "
+              "green inflow/refill normal, orange watch, red inflow "
+              "drought or refill failure — rainfall proxy, not reservoir "
+              "level." if _show_hydro else ""))
 
 _opts = list(_czones.zone_key)
 _default = st.session_state.get("hyd_zone")

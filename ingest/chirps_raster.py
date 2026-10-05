@@ -41,6 +41,7 @@ UA = {"User-Agent": "chirps-crop-monitor/0.1 (research)"}
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ZONES_GJ = ROOT / "data" / "zones" / "zones.geojson"
+CATCH_GJ = ROOT / "data" / "zones" / "catchments.geojson"
 MASKS_NPZ = ROOT / "data" / "zones" / "masks.npz"
 CACHE = ROOT / "data" / "rasters"
 KEEP_DEKADS = 72  # rolling on-disk cache (~2 years)
@@ -65,13 +66,21 @@ def dekad_dates(name: str) -> tuple[str, str]:
 
 
 def build_masks(ref_tif_bytes: bytes):
-    """Rasterize every zone onto the Africa grid; cache as boolean masks."""
+    """Rasterize every zone onto the Africa grid; cache as boolean masks.
+
+    V2.4: hydropower catchments (data/zones/catchments.geojson, cat_*)
+    rasterize into the same file — they stay boolean pixel means and are
+    exempt from the crop-area weighting.
+    """
     import json
     gj = json.loads(ZONES_GJ.read_text())
+    feats = list(gj["features"])
+    if CATCH_GJ.exists():
+        feats += json.loads(CATCH_GJ.read_text())["features"]
     with rasterio.open(io.BytesIO(ref_tif_bytes)) as src:
         transform, shape_, bounds = src.transform, (src.height, src.width), src.bounds
     masks, empty = {}, []
-    for f in gj["features"]:
+    for f in feats:
         key = f["properties"]["zone_key"]
         m = rasterio.features.rasterize(
             [(f["geometry"], 1)], out_shape=shape_, transform=transform,
@@ -222,12 +231,16 @@ def main() -> int:
     else:
         ref = fetch(f"{FINAL_DIR}/{finals[-1]}")
         masks, bounds = build_masks(ref)
-    # V2.8: crop-area weights supersede boolean masks when built
+    # V2.8: crop-area weights supersede boolean masks when built —
+    # except cat_* catchments (V2.4), which stay boolean pixel means
     weights_npz = MASKS_NPZ.parent / "weights.npz"
     if weights_npz.exists():
         w = np.load(weights_npz)
+        cats = {k: v for k, v in masks.items() if k.startswith("cat_")}
         masks = {k: w[k] for k in w.files if k != "__bounds__"}
-        print(f"using crop-area weights for {len(masks)} zones")
+        masks.update(cats)
+        print(f"using crop-area weights for {len(masks) - len(cats)} "
+              f"zones + {len(cats)} boolean catchments")
 
     n1 = process(finals, FINAL_DIR, DS_FINAL, masks, con)
     n2 = process(prelims, PRELIM_DIR, DS_PRELIM, masks, con,

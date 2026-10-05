@@ -17,6 +17,8 @@ git pull --rebase --autostash origin main
 ./venv/bin/python compute/metrics.py
 ./venv/bin/python compute/flood_signals.py
 ./venv/bin/python compute/cpi_impulse.py
+# V2.4 hydropower inflow proxy (catchment rainfall) — feeds the hydro lights
+./venv/bin/python compute/hydro_signal.py || echo "WARN: hydro signal failed, board uses stale catchment state"
 ./venv/bin/python compute/country_risk.py
 # escalate silent feed rot (a stale feed grays cells but told no one
 # until Sep 2026) — one email per episode, non-fatal
