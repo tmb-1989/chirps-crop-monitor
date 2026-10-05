@@ -103,9 +103,7 @@ tracking as bad as the worst of those events.
 """)
 
 today = dt.date.today()
-view = st.sidebar.radio("View", ["Country risk", "Overview", "Hydrology",
-                                 "Flood watch", "Hydropower"])
-
+view = st.sidebar.radio("View", ["Overview", "Country"])
 # ======================== COUNTRY RISK ====================================
 NAMES_CR = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
             "RWA": "Rwanda", "UGA": "Uganda", "ZMB": "Zambia",
@@ -207,7 +205,7 @@ def drought_region_block(expander: bool = True) -> None:
             "= season still running, can only worsen).")
 
 
-if view == "Country risk":
+if view == "Overview":
     st.subheader("Country risk board — ENSO / IOD / drought / flood")
     cr = load("SELECT * FROM country_risk")
     if cr.empty:
@@ -376,49 +374,6 @@ if view == "Country risk":
                        "board's second computation.")
         else:
             st.dataframe(log, hide_index=True, use_container_width=True)
-    st.stop()
-
-# ======================== OVERVIEW ========================================
-# one representative zone per country, its main season
-REP_ZONES = ["ken_uasin_gishu", "eth_oromia_maize", "tza_mbeya",
-             "uga_eastern", "zmb_central", "mwi_lilongwe", "zwe_mash_west",
-             "moz_zambezia", "mdg_vakinankaratra", "zaf_free_state"]
-BENCH = [("WRSI %med", "lwrsi_africa_dekad_pctm"),
-         ("SM %mean", "soilmoisture-0-100cm_global_month_pctm"),
-         ("CHIRPS z-score", "chirps_global_month_zscore")]
-EPISODES_OV = {"15-16": ("2015-07-01", "2016-06-30"),
-               "23-24": ("2023-07-01", "2024-06-30")}
-
-
-def season_cum_frame(zk: str, a: int, b: int):
-    """Per-season-year cumulative rainfall (EWX pentads) for one zone."""
-    cross = b < a
-    df = load(
-        "SELECT granule_start, value FROM observations WHERE zone_key=? AND "
-        "dataset IN ('chirps_global_pentad_data',"
-        "'chirps-prelim_global_pentad_data') ORDER BY granule_start", (zk,))
-    if df.empty:
-        return None, None, None
-    df = df.drop_duplicates("granule_start", keep="first")
-    ts = pd.to_datetime(df.granule_start)
-    df["month"], df["day"] = ts.dt.month, ts.dt.day
-    df = df[[(m >= a or m <= b) if cross else (a <= m <= b)
-             for m in df["month"]]].copy()
-    df["syear"] = [t.year if (not cross or m >= a) else t.year - 1
-                   for t, m in zip(ts[df.index], df["month"])]
-    df["doy_key"] = [f"{(m - a) % 12:02d}-{d:02d}"
-                     for m, d in zip(df["month"], df["day"])]
-    df = df.sort_values(["syear", "doy_key"])
-    df["cum"] = df.groupby("syear")["value"].cumsum()
-    clim = (df[(df.syear >= CLIM_START) & (df.syear <= CLIM_END)]
-            .groupby("doy_key")["cum"]
-            .agg(mean="mean", p20=lambda s: s.quantile(0.2),
-                 p80=lambda s: s.quantile(0.8)).reset_index())
-    cur_sy = today.year if (not cross or today.month >= a) else today.year - 1
-    return df, clim, cur_sy
-
-
-if view == "Overview":
     _map_png = DB.parent.parent / "data" / "coverage_map.png"
     if _map_png.exists():
         with st.expander("Geographic coverage — zones, basins, cities",
@@ -428,199 +383,13 @@ if view == "Overview":
                 "Crop zones colored by crop (purple = export belts), "
                 "flood basins in blue, over Natural Earth outlines. "
                 "Regenerated on dekad days by compute/coverage_map.py.")
-    drought_region_block(expander=False)
-    st.subheader("Main-season cumulative rainfall by country")
-    cols = st.columns(3)
-    for i, zk in enumerate(REP_ZONES):
-        zr = zones.set_index("zone_key").loc[zk]
-        sname, rng = (zr.seasons or "x:1-12").split(",")[0].split(":")
-        a, b = (int(v) for v in rng.split("-"))
-        df, clim, cur_sy = season_cum_frame(zk, a, b)
-        with cols[i % 3]:
-            if df is None:
-                st.caption(f"{zr['name']}: no data")
-                continue
-            fo = go.Figure()
-            fo.add_scatter(x=clim.doy_key, y=clim.p80, line=dict(width=0),
-                           showlegend=False, hoverinfo="skip")
-            fo.add_scatter(x=clim.doy_key, y=clim.p20, fill="tonexty",
-                           fillcolor="rgba(120,120,120,0.2)",
-                           line=dict(width=0), showlegend=False)
-            fo.add_scatter(x=clim.doy_key, y=clim["mean"],
-                           line=dict(color="gray", dash="dash"),
-                           showlegend=False)
-            for sy, color in ((2015, "darkorange"), (2023, "mediumpurple")):
-                n = df[df.syear == sy]
-                if not n.empty:
-                    fo.add_scatter(x=n.doy_key, y=n.cum,
-                                   line=dict(color=color, dash="dot",
-                                             width=1.5), showlegend=False)
-            c = df[df.syear == cur_sy]
-            if not c.empty:
-                fo.add_scatter(x=c.doy_key, y=c.cum,
-                               line=dict(color="crimson", width=2.5),
-                               showlegend=False)
-            MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
-                   "Sep", "Oct", "Nov", "Dec"]
-            in_now = (today.month >= a or today.month <= b) if b < a else \
-                (a <= today.month <= b)
-            if not in_now:
-                fo.add_annotation(
-                    text=f"season complete — next starts {MON[a - 1]}",
-                    xref="paper", yref="paper", x=0.98, y=0.03,
-                    showarrow=False, font=dict(size=11, color="gray"),
-                    xanchor="right")
-            n_m = (b - a) % 12 + 1
-            fo.update_xaxes(
-                type="category",
-                tickvals=[f"{o:02d}-01" for o in range(0, n_m, 2)],
-                ticktext=[["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul",
-                           "Aug", "Sep", "Oct", "Nov", "Dec"][(a - 1 + o) % 12]
-                          for o in range(0, n_m, 2)])
-            fo.update_layout(
-                title=dict(text=f"{zr['name']} — {sname} {cur_sy}"
-                                if c is not None and not c.empty else
-                                f"{zr['name']} — {sname}", font=dict(size=13)),
-                height=240, margin=dict(t=30, b=0, l=0, r=0),
-                showlegend=False)
-            st.plotly_chart(fo, use_container_width=True)
-    st.caption("Red = current season · gray dash = 1991–2020 mean · band = "
-               "20–80th pct · orange dots = 2015-16 El Niño · purple dots = "
-               "2023-24 El Niño")
-
-    def mini_indicator_chart(zk: str, ds: str, bands, y_floor, y_cap,
-                             color, title):
-        s = load("SELECT granule_start, value FROM observations WHERE "
-                 "zone_key=? AND dataset=? ORDER BY granule_start", (zk, ds))
-        if s.empty:
-            return None
-        s["date"] = pd.to_datetime(s.granule_start)
-        s = s[s.date >= s.date.max() - pd.Timedelta(days=1460)]
-        fm = go.Figure()
-        fm.add_scatter(x=s.date, y=s.value, line=dict(color=color, width=1.5),
-                       showlegend=False)
-        fm.add_hline(y=100, line_dash="dash", line_color="gray")
-        for y0, y1, fill, opac in bands:
-            fm.add_hrect(y0=y0, y1=y1, fillcolor=fill, opacity=opac,
-                         line_width=0)
-        fm.update_yaxes(range=[min(y_floor, s.value.min() - 5),
-                               max(y_cap, s.value.max() + 5)])
-        fm.update_layout(title=dict(text=title, font=dict(size=13)),
-                         height=220, margin=dict(t=30, b=0, l=0, r=0),
-                         showlegend=False)
-        return fm
-
-    WRSI_BANDS = [(80, 94, "gold", 0.13), (60, 80, "orange", 0.15),
-                  (0, 60, "orangered", 0.15)]
-    SM_BANDS = [(85, 95, "gold", 0.15), (75, 85, "orangered", 0.13)]
-
-    st.subheader("Water Requirement Satisfaction Index (% of median)")
-    cols = st.columns(3)
-    for i, zk in enumerate(REP_ZONES):
-        zr = zones.set_index("zone_key").loc[zk]
-        with cols[i % 3]:
-            fm = mini_indicator_chart(
-                zk, "lwrsi_africa_dekad_pctm", WRSI_BANDS, 55.0, 140.0,
-                "steelblue", zr["name"])
-            if fm is not None:
-                st.plotly_chart(fm, use_container_width=True)
-            else:
-                st.caption(f"{zr['name']}: no data")
-    st.caption("Bands: gold = mild stress (80–94) · orange = moderate "
-               "stress (60–80) · red = severe stress (<60)")
-
-    st.subheader("FLDAS root-zone soil moisture (% of mean)")
-    cols = st.columns(3)
-    for i, zk in enumerate(REP_ZONES):
-        zr = zones.set_index("zone_key").loc[zk]
-        with cols[i % 3]:
-            fm = mini_indicator_chart(
-                zk, "soilmoisture-0-100cm_global_month_pctm", SM_BANDS,
-                70.0, 125.0, "saddlebrown", zr["name"])
-            if fm is not None:
-                st.plotly_chart(fm, use_container_width=True)
-            else:
-                st.caption(f"{zr['name']}: no data")
-    st.caption("Bands: gold = watch territory (85–95) · red = issue level "
-               "(75–85)")
-
-    st.subheader("Indicators vs El Niño episode lows")
-    orows = []
-    for zk in zones.zone_key:
-        if zones.set_index("zone_key").loc[zk, "iso3"] is None:
-            continue
-        r = {"zone": zone_label[zk]}
-        any_data = False
-        for label, ds in BENCH:
-            curv = load("SELECT value FROM observations WHERE zone_key=? AND "
-                        "dataset=? ORDER BY granule_start DESC LIMIT 1",
-                        (zk, ds))
-            r[f"{label} now"] = round(curv.value.iloc[0], 1) \
-                if not curv.empty else None
-            any_data = any_data or not curv.empty
-            for ep, (x, y) in EPISODES_OV.items():
-                m = load("SELECT min(value) v FROM observations WHERE "
-                         "zone_key=? AND dataset=? AND granule_start "
-                         "BETWEEN ? AND ?", (zk, ds, x, y))
-                r[f"{label} {ep} low"] = round(m.v.iloc[0], 1) \
-                    if not m.empty and m.v.iloc[0] is not None else None
-        if any_data:
-            orows.append(r)
-    odf = pd.DataFrame(orows)
-
-    def _wrsi_shade(v):
-        # mirrors the zone-detail WRSI chart bands
-        if pd.isna(v):
-            return ""
-        if v < 60:
-            return "background-color: rgba(255,69,0,0.40)"    # severe
-        if v < 80:
-            return "background-color: rgba(255,165,0,0.35)"   # moderate
-        if v < 95:
-            return "background-color: rgba(255,215,0,0.30)"   # mild
-        return ""
-
-    def _sm_shade(v):
-        # mirrors the soil-moisture chart bands
-        if pd.isna(v):
-            return ""
-        if v < 75:
-            return "background-color: rgba(255,69,0,0.40)"    # beyond issue
-        if v < 85:
-            return "background-color: rgba(255,69,0,0.22)"    # issue level
-        if v < 95:
-            return "background-color: rgba(255,215,0,0.30)"   # watch
-        return ""
-
-    def _anom_shade(v):
-        # continuous diverging gradient: deeper red = drier, light blue =
-        # wetter; z-score scale saturates at |z| = 2.5
-        if pd.isna(v):
-            return ""
-        if v < 0:
-            alpha = min(0.45, abs(v) / 2.5 * 0.45)
-            return f"background-color: rgba(255,69,0,{alpha:.2f})"
-        alpha = min(0.30, v / 2.5 * 0.30)
-        return f"background-color: rgba(70,130,180,{alpha:.2f})"
-
-    wrsi_cols = [c for c in odf.columns if c.startswith("WRSI")]
-    sm_cols = [c for c in odf.columns if c.startswith("SM")]
-    anom_cols = [c for c in odf.columns if c.startswith("CHIRPS")]
-    styled = (odf.style
-              .map(_wrsi_shade, subset=wrsi_cols)
-              .map(_sm_shade, subset=sm_cols)
-              .map(_anom_shade, subset=anom_cols)
-              .format(precision=1))
-    st.dataframe(styled, hide_index=True,
-                 use_container_width=True, height=520)
-    st.caption("Lows are the worst single granule in each Jul–Jun episode "
-               "window. Off-season WRSI reads ~100 — compare southern-Africa "
-               "zones during Oct–Apr only. Composite zones (local pipeline "
-               "only) are excluded until their backfill completes.")
     st.stop()
 
-# ======================== FLOOD WATCH =====================================
-if view == "Flood watch":
+
+# ======================== FLOOD SECTION (Country tab) =====
+def _flood_section(_ciso):
+    st.divider()
+    st.header("Flood risk")
     import json as _json
     import sys as _sys
     _sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent
@@ -646,10 +415,12 @@ if view == "Flood watch":
                           "data" / "zones" / "basins.geojson").read())
     props = {f["properties"]["zone_key"]: f["properties"]
              for f in gj["features"]}
-    iso3 = st.sidebar.selectbox(
-        "Country", sorted({p["iso3"] for p in props.values()},
-                          key=list(COUNTRY).index),
-        format_func=COUNTRY.get)
+    iso3 = _ciso
+    if iso3 not in {p["iso3"] for p in props.values()}:
+        st.info("No flood layer for this country yet — basin selection "
+                "and event-catalog calibration are scoped (SCOPING-V2 "
+                "P6 covers MOZ/MWI/MDG next).")
+        return
     czones = [zk for zk, p in sorted(props.items()) if p["iso3"] == iso3]
 
     st.subheader(f"Flood watch — {COUNTRY[iso3]} basins")
@@ -660,7 +431,7 @@ if view == "Flood watch":
         st.warning(f"No flood_state data for {COUNTRY[iso3]} — the pentad "
                    "backfill may still be running; then run "
                    "compute/flood_signals.py.")
-        st.stop()
+        return
     fs["date"] = pd.to_datetime(fs.granule_start)
     latest_p = fs.granule_start.max()
     cur = fs[fs.granule_start == latest_p].set_index("zone_key")
@@ -870,10 +641,16 @@ if view == "Flood watch":
         "fire much more often and are best read alongside the rest of the "
         "chart. The gray band shows the rainfall forecast for the next "
         "10 days.")
-    st.stop()
+    return
 
-# ======================== HYDROPOWER ======================================
-if view == "Hydropower":
+
+# ======================== HYDRO SECTION (Country tab) =====
+def _hydro_section(_ciso):
+    st.divider()
+    st.header("Hydropower")
+    if _ciso != "ZMB":
+        st.info("No hydropower monitor for this country — Kariba (Zambia) only; the seven-dam catchment expansion is scoped as P5.")
+        return
     st.subheader("Hydropower — Lake Kariba (Zambia)")
     hy = load("SELECT status, reason, as_of FROM country_risk WHERE "
               "country='ZMB' AND factor='hydro'")
@@ -892,7 +669,7 @@ if view == "Hydropower":
               "FROM kariba_level WHERE level_m IS NOT NULL) ORDER BY date")
     if kb.empty:
         st.warning("No Kariba data — run ingest/kariba.py.")
-        st.stop()
+        return
     kb["date"] = pd.to_datetime(kb.date)
     kb = kb.drop_duplicates("date", keep="last").set_index("date")
 
@@ -980,9 +757,10 @@ if view == "Hydropower":
         "turbine flow driving the drawdown (window limited to the "
         "gap-free scrape era). Thresholds calibrated in the "
         "elnino-hydro-dashboard project on 2017–2026 seasons.")
-    st.stop()
+    return
 
-# ======================== HYDROLOGY: COUNTRY MAP + ZONE DETAIL ===========
+
+# ======================== COUNTRY TAB =====================
 import json as _json  # noqa: E402
 
 _iso_opts = [c for c in NAMES_CR if c in set(zones.iso3)]
@@ -1516,3 +1294,8 @@ st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 st.caption("Sources: CHC UCSB CHIRPS via USGS FEWS NET GeoEngine; "
            "FEWS NET crop zones (fews_shapefile_cropzones); FLDAS Noah; "
            "LWRSI. Prelim pentads revise when late gauge data arrives.")
+
+# flood + hydro components for the selected country
+_flood_section(_ciso)
+_hydro_section(_ciso)
+
