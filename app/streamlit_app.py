@@ -980,9 +980,138 @@ if view == "Hydropower":
         "elnino-hydro-dashboard project on 2017–2026 seasons.")
     st.stop()
 
-# ======================== ZONE DETAIL =====================================
+# ======================== HYDROLOGY: COUNTRY MAP + ZONE DETAIL ===========
+import json as _json  # noqa: E402
+
+_iso_opts = [c for c in NAMES_CR if c in set(zones.iso3)]
+_ciso = st.sidebar.selectbox("Country", _iso_opts,
+                             format_func=lambda c: NAMES_CR.get(c, c))
+_czones = zones[zones.iso3 == _ciso]
+
+
+def _wrsi_band(w, ins):
+    """Mirror the WRSI chart bands (gold 80-94, orange 60-79, red <60)."""
+    if w is None or pd.isna(w) or not ins:
+        return "#d8d8d8", "off-season / no data"
+    if w >= 95:
+        return "#79c47e", "normal (≥95)"
+    if w >= 80:
+        return "#e8c84d", "mild stress (80–94)"
+    if w >= 60:
+        return "#ec9b3b", "stressed (60–79)"
+    return "#d95f4b", "crop-failure risk (<60)"
+
+
+_zrisk_map = load("SELECT zone_key, wrsi, wrsi_in_season, spi3, sm, "
+                  "season FROM zone_risk WHERE factor IN "
+                  "('drought','export')").drop_duplicates("zone_key") \
+    .set_index("zone_key")
+_zgj = _json.loads((_dbdir.parent / "data/zones/zones.geojson").read_text())
+_out_path = _dbdir.parent / "data/zones/country_outlines.geojson"
+
+fmap = go.Figure()
+if _out_path.exists():
+    for f in _json.loads(_out_path.read_text())["features"]:
+        if f["properties"]["iso3"] != _ciso:
+            continue
+        polys = f["geometry"]["coordinates"]
+        if f["geometry"]["type"] == "Polygon":
+            polys = [polys]
+        for rings in polys:
+            xs = [p[0] for p in rings[0]]
+            ys = [p[1] for p in rings[0]]
+            fmap.add_scatter(x=xs, y=ys, mode="lines",
+                             line=dict(color="#9a9a9a", width=1),
+                             fill="toself", fillcolor="#f4f1ea",
+                             hoverinfo="skip", showlegend=False)
+_map_zones = []
+for f in _zgj["features"]:
+    p = f["properties"]
+    zk = p["zone_key"]
+    if p["iso3"] != _ciso or zk.endswith(("_basket", "_belt_x")) or \
+            zk in ("ken_grain_basket", "zmb_maize_belt",
+                   "zaf_maize_triangle"):
+        continue
+    r = _zrisk_map.loc[zk] if zk in _zrisk_map.index else None
+    w = None if r is None else r.wrsi
+    ins = 0 if r is None else r.wrsi_in_season
+    fc, blab = _wrsi_band(w, ins)
+    meta = _czones.set_index("zone_key").loc[zk] \
+        if zk in set(_czones.zone_key) else None
+    sector = getattr(meta, "sector", None) or "staple"
+    hover = (f"<b>{zone_label.get(zk, zk)}</b><br>"
+             f"{(getattr(meta, 'crop', None) or '?')}"
+             f"{' · export belt' if sector == 'export' else ''}<br>"
+             f"WRSI: {'—' if w is None or pd.isna(w) else f'{w:.0f}'} "
+             f"({blab})<br>"
+             + ("" if r is None or pd.isna(r.spi3)
+                else f"SPI-3: {r.spi3:.1f}<br>")
+             + ("" if r is None or pd.isna(r.sm)
+                else f"Soil moisture: {r.sm:.0f}%<br>")
+             + ("" if r is None or not r.season
+                else f"Season: {r.season}")
+             + "<extra></extra>")
+    polys = f["geometry"]["coordinates"]
+    if f["geometry"]["type"] == "Polygon":
+        polys = [polys]
+    first = True
+    for rings in polys:
+        xs = [pt[0] for pt in rings[0]]
+        ys = [pt[1] for pt in rings[0]]
+        fmap.add_scatter(
+            x=xs, y=ys, mode="lines", fill="toself", fillcolor=fc,
+            opacity=0.85, name="",
+            line=dict(color="#5f4379" if sector == "export" else "white",
+                      width=1.6 if sector == "export" else 0.7),
+            customdata=[zk] * len(xs), hovertemplate=hover,
+            showlegend=False)
+        first = False
+    _map_zones.append((zk, f, w, hover))
+# centroid markers: the WRSI value labels AND fat click targets —
+# clicking a polygon interior does not emit a plotly point selection,
+# clicking the (invisible) centroid marker does
+if _map_zones:
+    from shapely.geometry import shape as _shape  # noqa: E402
+    _cx, _cy, _ct, _ck, _ch = [], [], [], [], []
+    for zk, f, w, hover in _map_zones:
+        pt = _shape(f["geometry"]).representative_point()
+        _cx.append(pt.x)
+        _cy.append(pt.y)
+        _ct.append("" if w is None or pd.isna(w) else f"{w:.0f}")
+        _ck.append(zk)
+        _ch.append(hover)
+    fmap.add_scatter(
+        x=_cx, y=_cy, mode="markers+text", text=_ct, name="",
+        textfont=dict(size=11, color="#1f2733", family="sans-serif"),
+        marker=dict(size=30, color="rgba(0,0,0,0)"),
+        customdata=_ck, hovertemplate=_ch, showlegend=False)
+fmap.update_layout(
+    height=540, margin=dict(l=0, r=0, t=30, b=0),
+    title=dict(text=f"Current WRSI by growing region — "
+                    f"{NAMES_CR.get(_ciso, _ciso)} (click a zone to open "
+                    "its charts below)", font=dict(size=13)),
+    xaxis=dict(visible=False), yaxis=dict(visible=False,
+                                          scaleanchor="x"),
+    plot_bgcolor="white", dragmode="pan")
+_ev = st.plotly_chart(fmap, use_container_width=True,
+                      on_select="rerun", key=f"hydmap_{_ciso}")
+try:
+    _pts = _ev.selection.points if _ev else []
+    if _pts:
+        st.session_state["hyd_zone"] = _pts[0]["customdata"]
+except Exception:
+    pass
+st.caption("Shading mirrors the WRSI chart bands: green ≥95, gold 80–94, "
+           "orange 60–79, red <60; gray = off-season or no data. Purple "
+           "edges mark export belts (clipped to their GAEZ crop "
+           "footprint). Hover for SPI-3, soil moisture and season.")
+
+_opts = list(_czones.zone_key)
+_default = st.session_state.get("hyd_zone")
 zone_key = st.sidebar.selectbox(
-    "Crop zone", zones.zone_key, format_func=lambda k: zone_label[k])
+    "Crop zone", _opts,
+    index=_opts.index(_default) if _default in _opts else 0,
+    format_func=lambda k: zone_label[k])
 zrow = zones.set_index("zone_key").loc[zone_key]
 
 # ---- season handling ----------------------------------------------------
