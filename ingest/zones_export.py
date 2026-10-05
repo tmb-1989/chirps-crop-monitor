@@ -11,6 +11,9 @@ EXPORT_ZONES = {
     "tza_tobacco": ('TZA', 'Tabora tobacco belt (export)', -5.07, 32.06, [('year_round', 1, 12)]),
     "moz_tobacco": ('MOZ', 'Tete tobacco belt (export)', -14.75, 34.35, [('year_round', 1, 12)]),
     "mdg_vanilla": ('MDG', 'Antsiranana vanilla belt (export)', -14.27, 50.16, [('year_round', 1, 12)]),
+    "civ_cocoa": ('CIV', 'Haut-sassandra cocoa belt (export)', 7.125, -6.7083, [('year_round', 1, 12)]),
+    "gha_cocoa": ('GHA', 'Western cocoa belt (export)', 5.2917, -1.7083, [('year_round', 1, 12)]),
+    "nga_cocoa": ('NGA', 'Ondo cocoa belt (export)', 7.1, 5.05, [('year_round', 1, 12)]),
     "tza_cashew": ('TZA', 'Mtwara cashew belt (export)', -10.55, 39.9, [('year_round', 1, 12)]),
     "moz_cashew": ('MOZ', 'Nampula cashew belt (export)', -15.1, 39.3, [('year_round', 1, 12)]),
 }
@@ -26,6 +29,9 @@ EXPORT_CROP = {
     "tza_tobacco": "tobacco",
     "moz_tobacco": "tobacco",
     "mdg_vanilla": "vanilla",
+    "civ_cocoa": "cocoa",
+    "gha_cocoa": "cocoa",
+    "nga_cocoa": "cocoa",
     "tza_cashew": "cashew",
     "moz_cashew": "cashew",
 }

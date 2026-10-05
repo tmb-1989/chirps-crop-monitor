@@ -110,7 +110,9 @@ view = st.sidebar.radio("View", ["Country risk", "Overview", "Hydrology",
 NAMES_CR = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
             "RWA": "Rwanda", "UGA": "Uganda", "ZMB": "Zambia",
             "MWI": "Malawi", "ZWE": "Zimbabwe", "MOZ": "Mozambique",
-            "MDG": "Madagascar", "ZAF": "South Africa"}
+            "MDG": "Madagascar", "ZAF": "South Africa",
+            "NGA": "Nigeria", "GHA": "Ghana", "CIV": "Côte d'Ivoire",
+            "BEN": "Benin"}
 DOT = {"green": "🟢", "yellow": "🟡", "red": "🔴", "gray": "⚪"}
 FILL = {"green": "#e6f4e6", "yellow": "#fdf3d7", "red": "#fbe3e3",
         "gray": "#f0f0f0"}

@@ -32,7 +32,9 @@ UA = {"User-Agent": "chirps-crop-monitor/0.1 (research)"}
 HDX = "https://data.humdata.org/api/3/action/package_show?id=wfp-food-prices-for-{}"
 SLUGS = {"KEN": "kenya", "ETH": "ethiopia", "TZA": "united-republic-of-tanzania",
          "RWA": "rwanda", "UGA": "uganda", "ZMB": "zambia", "MWI": "malawi",
-         "ZWE": "zimbabwe", "MOZ": "mozambique", "MDG": "madagascar"}
+         "ZWE": "zimbabwe", "MOZ": "mozambique", "MDG": "madagascar",
+         "NGA": "nigeria", "GHA": "ghana", "CIV": "cote-d-ivoire",
+         "BEN": "benin"}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS staple_prices (

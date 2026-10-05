@@ -25,9 +25,11 @@ sys.path.insert(0, str(ROOT / "ingest"))
 import db  # noqa: E402
 
 NAMES = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
-         "RWA": "Rwanda", "UGA": "Uganda", "ZMB": "Zambia",
-         "MWI": "Malawi", "ZWE": "Zimbabwe", "MOZ": "Mozambique",
-         "MDG": "Madagascar", "ZAF": "South Africa"}
+         "RWA": "Rwanda", "UGA": "Uganda", "NGA": "Nigeria",
+         "GHA": "Ghana", "CIV": "Côte d'Ivoire", "BEN": "Benin",
+         "ZMB": "Zambia", "MWI": "Malawi", "ZWE": "Zimbabwe",
+         "MOZ": "Mozambique", "MDG": "Madagascar",
+         "ZAF": "South Africa"}
 ORDER = list(NAMES)
 COMPOSITES = {"ken_grain_basket", "zmb_maize_belt", "zaf_maize_triangle"}
 CROP_STYLE = {"maize": ("#2e8b57", "#1d5c39"),
@@ -66,6 +68,17 @@ CITIES = {
  "ZAF": [("Pretoria", -25.75, 28.19, 1, 4, 5), ("Johannesburg", -26.20, 28.05, 0, 4, -10),
          ("Bloemfontein", -29.12, 26.21, 0, 4, -9), ("Durban", -29.86, 31.02, 0, 4, 3),
          ("Cape Town", -33.93, 18.42, 0, 4, 3)],
+ "NGA": [("Abuja", 9.06, 7.49, 1, 4, 3), ("Lagos", 6.45, 3.39, 0, 4, 3),
+         ("Kano", 12.00, 8.52, 0, 4, 3), ("Ibadan", 7.38, 3.90, 0, 4, -10)],
+ "GHA": [("Accra", 5.56, -0.20, 1, 4, 3), ("Kumasi", 6.69, -1.62, 0, 4, 3),
+         ("Tamale", 9.40, -0.84, 0, 4, 3)],
+ "CIV": [("Yamoussoukro", 6.83, -5.29, 1, 4, 3),
+         ("Abidjan", 5.34, -4.03, 0, 4, 3),
+         ("Bouak\u00e9", 7.69, -5.03, 0, 4, 3),
+         ("Daloa", 6.88, -6.45, 0, 4, -10)],
+ "BEN": [("Porto-Novo", 6.50, 2.60, 1, 4, 3),
+         ("Cotonou", 6.37, 2.39, 0, -4, -10),
+         ("Parakou", 9.34, 2.61, 0, 4, 3)],
 }
 
 
@@ -113,7 +126,7 @@ def main() -> int:
             shape(f["geometry"]))
 
     halo = [pe.withStroke(linewidth=2, foreground="white")]
-    fig, axes = plt.subplots(3, 4, figsize=(18, 14))
+    fig, axes = plt.subplots(4, 4, figsize=(18, 18))
     axes = axes.ravel()
     for ax, iso in zip(axes, ORDER):
         o = outlines[iso]

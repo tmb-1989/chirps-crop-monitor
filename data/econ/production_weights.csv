@@ -1,60 +1,93 @@
 zone_key,iso3,commodity,share_national,note
-ken_kitui,KEN,Maize,0.112,GAEZ+2015 measured; auto-added V2.2
-ken_machakos,KEN,Maize,0.059,GAEZ+2015 measured; auto-added V2.2
-ken_makueni,KEN,Maize,0.057,GAEZ+2015 measured; auto-added V2.2
-ken_kilifi,KEN,Maize,0.055,GAEZ+2015 measured; auto-added V2.2
-ken_narok,KEN,Maize,0.051,GAEZ+2015 measured; auto-added V2.2
-ken_kakamega,KEN,Maize,0.047,GAEZ+2015 measured; auto-added V2.2
-ken_nandi,KEN,Maize,0.044,GAEZ+2015 measured; auto-added V2.2
-ken_kisumu,KEN,Maize,0.042,GAEZ+2015 measured; auto-added V2.2
+ken_nakuru,KEN,Maize,0.041,GAEZ+2015 measured; auto-added V2.2
+ken_bomet,KEN,Maize,0.039,GAEZ+2015 measured; auto-added V2.2
+ken_bungoma,KEN,Maize,0.038,GAEZ+2015 measured; auto-added V2.2
 ken_uasin_gishu,KEN,Maize,0.042,GAEZ+2015 measured
 ken_trans_nzoia,KEN,Maize,0.027,GAEZ+2015 measured
-eth_snnpr,ETH,Maize,0.163,GAEZ+2015 measured; auto-added V2.2
+ken_kitui,KEN,Maize,0.112,GAEZ+2015 measured
+ken_machakos,KEN,Maize,0.059,GAEZ+2015 measured
+ken_makueni,KEN,Maize,0.057,GAEZ+2015 measured
+ken_kilifi,KEN,Maize,0.055,GAEZ+2015 measured
+ken_narok,KEN,Maize,0.051,GAEZ+2015 measured
+ken_kakamega,KEN,Maize,0.047,GAEZ+2015 measured
+ken_nandi,KEN,Maize,0.044,GAEZ+2015 measured
+ken_kisumu,KEN,Maize,0.042,GAEZ+2015 measured
 eth_arsi,ETH,Wheat,0.025,GAEZ+2015 measured
 eth_gojjam,ETH,Wheat,0.147,GAEZ+2015 measured
 eth_oromia_maize,ETH,Maize,0.212,GAEZ+2015 measured
-tza_shinyanga,TZA,Maize,0.086,GAEZ+2015 measured; auto-added V2.2
-tza_tabora,TZA,Maize,0.086,GAEZ+2015 measured; auto-added V2.2
-tza_simiyu,TZA,Maize,0.059,GAEZ+2015 measured; auto-added V2.2
-tza_mwanza,TZA,Maize,0.053,GAEZ+2015 measured; auto-added V2.2
-tza_ruvuma,TZA,Maize,0.052,GAEZ+2015 measured; auto-added V2.2
-tza_tanga,TZA,Maize,0.05,GAEZ+2015 measured; auto-added V2.2
-tza_iringa,TZA,Maize,0.046,GAEZ+2015 measured; auto-added V2.2
-tza_morogoro,TZA,Maize,0.044,GAEZ+2015 measured; auto-added V2.2
+eth_snnpr,ETH,Maize,0.163,GAEZ+2015 measured
+tza_njombe,TZA,Maize,0.043,GAEZ+2015 measured; auto-added V2.2
+tza_manyara,TZA,Maize,0.037,GAEZ+2015 measured; auto-added V2.2
+tza_kilimanjaro,TZA,Maize,0.035,GAEZ+2015 measured; auto-added V2.2
+tza_arusha,TZA,Maize,0.034,GAEZ+2015 measured; auto-added V2.2
+tza_geita,TZA,Maize,0.03,GAEZ+2015 measured; auto-added V2.2
 tza_mbeya,TZA,Maize,0.049,GAEZ+2015 measured
-rwa_southern,RWA,Maize,0.342,GAEZ+2015 measured; auto-added V2.2
-rwa_northern,RWA,Maize,0.216,GAEZ+2015 measured; auto-added V2.2
-rwa_western,RWA,Maize,0.206,GAEZ+2015 measured; auto-added V2.2
+tza_shinyanga,TZA,Maize,0.086,GAEZ+2015 measured
+tza_tabora,TZA,Maize,0.086,GAEZ+2015 measured
+tza_simiyu,TZA,Maize,0.059,GAEZ+2015 measured
+tza_mwanza,TZA,Maize,0.053,GAEZ+2015 measured
+tza_ruvuma,TZA,Maize,0.052,GAEZ+2015 measured
+tza_tanga,TZA,Maize,0.053,GAEZ+2015 measured
+tza_iringa,TZA,Maize,0.046,GAEZ+2015 measured
+tza_morogoro,TZA,Maize,0.044,GAEZ+2015 measured
 rwa_eastern,RWA,Sorghum,0.312,GAEZ+2015 measured
-uga_northern,UGA,Maize,0.228,GAEZ+2015 measured; auto-added V2.2
+rwa_southern,RWA,Sorghum,0.346,GAEZ+2015 measured
+rwa_northern,RWA,Sorghum,0.314,GAEZ+2015 measured
+rwa_western,RWA,Sorghum,0.085,GAEZ+2015 measured
 uga_masindi,UGA,Maize,0.063,GAEZ+2015 measured
 uga_eastern,UGA,Maize,0.231,GAEZ+2015 measured
-zmb_lusaka,ZMB,Maize,0.033,GAEZ+2015 measured; auto-added V2.2
+uga_northern,UGA,Maize,0.228,GAEZ+2015 measured
 zmb_central,ZMB,Maize,0.067,GAEZ+2015 measured
 zmb_southern,ZMB,Maize,0.05,GAEZ+2015 measured
 zmb_eastern,ZMB,Maize,0.058,GAEZ+2015 measured
-mwi_southern,MWI,Maize,0.422,GAEZ+2015 measured; auto-added V2.2
+zmb_lusaka,ZMB,Maize,0.038,GAEZ+2015 measured
 mwi_lilongwe,MWI,Maize,0.506,GAEZ+2015 measured
-zwe_mashonaland_east,ZWE,Maize,0.108,GAEZ+2015 measured; auto-added V2.2
-zwe_mashonaland_central,ZWE,Maize,0.091,GAEZ+2015 measured; auto-added V2.2
-zwe_manicaland,ZWE,Maize,0.087,GAEZ+2015 measured; auto-added V2.2
-zwe_midlands,ZWE,Maize,0.083,GAEZ+2015 measured; auto-added V2.2
-zwe_masvingo,ZWE,Maize,0.029,GAEZ+2015 measured; auto-added V2.2
+mwi_southern,MWI,Maize,0.426,GAEZ+2015 measured
 zwe_mash_west,ZWE,Maize,0.116,GAEZ+2015 measured
-moz_tete,MOZ,Maize,0.141,GAEZ+2015 measured; auto-added V2.2
-moz_nampula,MOZ,Maize,0.11,GAEZ+2015 measured; auto-added V2.2
-moz_niassa,MOZ,Maize,0.071,GAEZ+2015 measured; auto-added V2.2
-moz_zambezia2,MOZ,Maize,0.064,GAEZ+2015 measured; auto-added V2.2
+zwe_mashonaland_east,ZWE,Maize,0.108,GAEZ+2015 measured
+zwe_mashonaland_central,ZWE,Maize,0.104,GAEZ+2015 measured
+zwe_manicaland,ZWE,Maize,0.087,GAEZ+2015 measured
+zwe_midlands,ZWE,Maize,0.083,GAEZ+2015 measured
+zwe_masvingo,ZWE,Maize,0.029,GAEZ+2015 measured
+moz_zambezia3,MOZ,Maize,0.064,GAEZ+2015 measured; auto-added V2.2
 moz_manica,MOZ,Maize,0.093,GAEZ+2015 measured
 moz_zambezia,MOZ,Maize,0.254,GAEZ+2015 measured
-mdg_fianarantsoa,MDG,Rice,0.086,GAEZ+2015 measured; auto-added V2.2
-mdg_toamasina,MDG,Rice,0.066,GAEZ+2015 measured; auto-added V2.2
-mdg_toliara,MDG,Rice,0.026,GAEZ+2015 measured; auto-added V2.2
+moz_tete,MOZ,Maize,0.141,GAEZ+2015 measured
+moz_nampula,MOZ,Maize,0.11,GAEZ+2015 measured
+moz_niassa,MOZ,Maize,0.071,GAEZ+2015 measured
+moz_zambezia2,MOZ,Maize,0.254,GAEZ+2015 measured
 mdg_vakinankaratra,MDG,Maize,0.115,GAEZ+2015 measured
-zaf_gauteng,ZAF,Maize,0.057,GAEZ+2015 measured; auto-added V2.2
+mdg_fianarantsoa,MDG,Maize,0.058,GAEZ+2015 measured
+mdg_toamasina,MDG,Maize,0.006,GAEZ+2015 measured
+mdg_toliara,MDG,Maize,0.153,GAEZ+2015 measured
 zaf_free_state,ZAF,Maize,0.256,GAEZ+2015 measured
 zaf_north_west,ZAF,Maize,0.126,GAEZ+2015 measured
 zaf_mpumalanga,ZAF,Maize,0.208,GAEZ+2015 measured
+zaf_gauteng,ZAF,Maize,0.057,GAEZ+2015 measured
+nga_kaduna,NGA,Maize,0.103,GAEZ+2015 measured; auto-added V2.2
+nga_bauchi,NGA,Maize,0.075,GAEZ+2015 measured; auto-added V2.2
+nga_kebbi,NGA,Maize,0.049,GAEZ+2015 measured; auto-added V2.2
+nga_gombe,NGA,Maize,0.046,GAEZ+2015 measured; auto-added V2.2
+nga_katsina,NGA,Maize,0.045,GAEZ+2015 measured; auto-added V2.2
+nga_niger,NGA,Maize,0.044,GAEZ+2015 measured; auto-added V2.2
+nga_zamfara,NGA,Maize,0.043,GAEZ+2015 measured; auto-added V2.2
+nga_kano,NGA,Maize,0.039,GAEZ+2015 measured; auto-added V2.2
+gha_northern,GHA,Maize,0.347,GAEZ+2015 measured; auto-added V2.2
+gha_ashanti,GHA,Maize,0.082,GAEZ+2015 measured; auto-added V2.2
+gha_eastern,GHA,Maize,0.08,GAEZ+2015 measured; auto-added V2.2
+gha_upper_west,GHA,Maize,0.062,GAEZ+2015 measured; auto-added V2.2
+gha_upper_east,GHA,Maize,0.053,GAEZ+2015 measured; auto-added V2.2
+gha_brong_ahafo,GHA,Maize,0.045,GAEZ+2015 measured; auto-added V2.2
+gha_volta,GHA,Maize,0.045,GAEZ+2015 measured; auto-added V2.2
+civ_savanes,CIV,Rice,0.083,GAEZ+2015 measured; auto-added V2.2
+ben_collines,BEN,Maize,0.12,GAEZ+2015 measured; auto-added V2.2
+ben_borgou,BEN,Maize,0.097,GAEZ+2015 measured; auto-added V2.2
+ben_atlantique,BEN,Maize,0.087,GAEZ+2015 measured; auto-added V2.2
+ben_plateau,BEN,Maize,0.075,GAEZ+2015 measured; auto-added V2.2
+ben_zou,BEN,Maize,0.071,GAEZ+2015 measured; auto-added V2.2
+ben_couffo,BEN,Maize,0.067,GAEZ+2015 measured; auto-added V2.2
+ben_mono,BEN,Maize,0.055,GAEZ+2015 measured; auto-added V2.2
+ben_oueme,BEN,Maize,0.041,GAEZ+2015 measured; auto-added V2.2
 eth_coffee,ETH,Coffee,0.424,GAEZ Stimulants belt share; admin-1 Oromia; proxy raster — see SCOPING-V2.3
 uga_coffee,UGA,Coffee,0.195,GAEZ Stimulants belt share; admin-1 Central; proxy raster — see SCOPING-V2.3
 rwa_coffee,RWA,Coffee,0.892,GAEZ Stimulants belt share; admin-1 Western; proxy raster — see SCOPING-V2.3
@@ -66,5 +99,8 @@ mwi_tobacco,MWI,Tobacco,0.367,GAEZ Tobacco belt share; admin-1 Central; proxy ra
 tza_tobacco,TZA,Tobacco,0.055,GAEZ Tobacco belt share; admin-1 Tabora; proxy raster — see SCOPING-V2.3
 moz_tobacco,MOZ,Tobacco,0.006,GAEZ Tobacco belt share; admin-1 Tete; proxy raster — see SCOPING-V2.3
 mdg_vanilla,MDG,Vanilla,0.11,GAEZ CropsNES belt share; admin-1 Antsiranana; proxy raster — see SCOPING-V2.3
+civ_cocoa,CIV,Cocoa,0.267,GAEZ Stimulants belt share; admin-1 Haut-sassandra; proxy raster — see SCOPING-V2.3
+gha_cocoa,GHA,Cocoa,0.282,GAEZ Stimulants belt share; admin-1 Western; proxy raster — see SCOPING-V2.3
+nga_cocoa,NGA,Cocoa,0.379,GAEZ Stimulants belt share; admin-1 Ondo; proxy raster — see SCOPING-V2.3
 tza_cashew,TZA,Cashew,0.077,GAEZ CropsNES belt share; admin-1 Mtwara; proxy raster — see SCOPING-V2.3
 moz_cashew,MOZ,Cashew,0.143,GAEZ CropsNES belt share; admin-1 Nampula; proxy raster — see SCOPING-V2.3

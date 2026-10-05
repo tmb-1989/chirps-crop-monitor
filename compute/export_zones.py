@@ -62,6 +62,9 @@ TARGETS = [
     ("TZA", "tobacco", "Tobacco", (-5.07, 32.06)),    # Urambo/Tabora
     ("MOZ", "tobacco", "Tobacco", (-14.75, 34.35)),   # Angonia/Tete
     ("MDG", "vanilla", "CropsNES", (-14.27, 50.16)),  # Sambava/SAVA
+    ("CIV", "cocoa", "Stimulants", None),             # SW belt peak
+    ("GHA", "cocoa", "Stimulants", None),             # Ashanti/Western peak
+    ("NGA", "cocoa", "Stimulants", (7.10, 5.05)),     # Ondo State
     ("TZA", "cashew", "CropsNES", (-10.55, 39.90)),   # Mtwara
     ("MOZ", "cashew", "CropsNES", (-15.10, 39.30)),   # Nampula
 ]
