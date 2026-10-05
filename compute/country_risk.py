@@ -400,6 +400,32 @@ def hydro_status(con, today: dt.date) -> dict:
     klight = _kariba_light(con, today)
     for iso in ("ZMB", "ZWE"):
         per_c.setdefault(iso, []).append(klight)
+    # V3.2 reservoir levels (NASA GWM altimetry, ingest/gwm_levels.py):
+    # engineering-anchored band position — red <10%, yellow <25%
+    try:
+        res = con.execute(
+            "SELECT res_key, name, iso3, date, level_m, band_frac, "
+            "trend_8wk FROM live.reservoir_state").fetchall()
+    except Exception:  # table absent until gwm_levels.py runs
+        res = []
+    for rk, name, iso, d, lvl, frac, trend in res:
+        tr = "" if trend is None else f", {trend:+.1f}m/8wk"
+        lab = f"{name} {lvl:.1f}m — {frac:.0%} of operating band{tr}"
+        if _age(d, today) > 35:        # ~3 missed 10-day passes
+            light = ("gray", f"{name}: altimetry stale (through {d})", d)
+        elif frac < 0.10:
+            light = ("red", f"{lab} — at minimum-operating-level "
+                            "territory", d)
+        elif frac < 0.25:
+            light = ("yellow", f"{lab} — low on the band", d)
+        else:
+            light = ("green", lab, d)
+        per_c.setdefault(iso, []).append(light)
+    # GERD has no public level feed (SCOPING-HYDRO-LEVELS): say so
+    # rather than letting the rainfall proxy stand in silently
+    per_c.setdefault("ETH", []).append(
+        ("gray", "GERD storage: no public level feed — Blue Nile "
+                 "catchment rainfall proxy only", None))
     for iso, lights in per_c.items():
         if iso not in out:
             continue

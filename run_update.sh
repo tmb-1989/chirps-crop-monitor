@@ -17,6 +17,14 @@ git pull --rebase --autostash origin main
 ./venv/bin/python compute/metrics.py
 ./venv/bin/python compute/flood_signals.py
 ./venv/bin/python compute/cpi_impulse.py
+# V3.2 reservoir altimetry (NASA GWM, ~10-day cadence; 324 MB source
+# tarball, so dekad days only — must land BEFORE country_risk so the
+# board reads fresh reservoir state; non-fatal)
+case $(date +%-d) in
+  3|8|13|18|23|28)
+    ./venv/bin/python ingest/gwm_levels.py || echo "WARN: GWM reservoir levels failed, board uses stale state"
+    ;;
+esac
 # V2.4 hydropower inflow proxy (catchment rainfall) — feeds the hydro lights
 ./venv/bin/python compute/hydro_signal.py || echo "WARN: hydro signal failed, board uses stale catchment state"
 ./venv/bin/python compute/country_risk.py

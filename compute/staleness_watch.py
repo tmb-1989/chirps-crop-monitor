@@ -42,6 +42,10 @@ FEEDS = [
     # drift filled dates with null values) — watch the value, not the row
     ("Kariba turbine discharge (ZRA)", "SELECT max(date) FROM "
      "kariba_reservoir WHERE turbine_discharge_m3s IS NOT NULL", 14),
+    # V3.2 reservoir altimetry (NASA GWM, ~10-day cadence, dekad-day
+    # fetch): three missed passes = stale
+    ("Reservoir altimetry (NASA GWM)", "SELECT max(date) FROM "
+     "reservoir_levels", 35),
     # corruption sentinel: the Sep 26 2026 column shift wrote pct_full
     # values into turbine (plausible 40s, invisible to staleness).
     # Reports 'no data' (=alert) whenever recent discharge mirrors

@@ -832,12 +832,59 @@ def _catchment_block(_ciso):
     return True
 
 
+def _reservoir_block(_ciso):
+    """V3.2: NASA GWM altimetry reservoir levels with engineering-
+    anchored operating bands (SCOPING-HYDRO-LEVELS)."""
+    try:
+        rs = load("SELECT * FROM reservoir_state WHERE iso3=?", (_ciso,))
+    except Exception:
+        return False
+    if rs.empty:
+        return False
+    for _, r in rs.iterrows():
+        c1, c2, c3 = st.columns(3)
+        c1.metric(r["name"], f"{r.level_m:.1f} m",
+                  f"as of {r.date} (satellite altimetry)")
+        c2.metric("Position on operating band", f"{r.band_frac:.0%}",
+                  f"band {r.mol_m:.1f}–{r.fsl_m:.1f} m")
+        c3.metric("8-week trend",
+                  "—" if pd.isna(r.trend_8wk) else f"{r.trend_8wk:+.2f} m",
+                  "rising" if (r.trend_8wk or 0) > 0 else "falling")
+        hist = load("SELECT date, level_m FROM reservoir_levels WHERE "
+                    "res_key=? ORDER BY date", (r.res_key,))
+        if not hist.empty:
+            hist["date"] = pd.to_datetime(hist.date)
+            fr = go.Figure()
+            fr.add_scatter(x=hist.date, y=hist.level_m, mode="lines",
+                           line=dict(color="#2b6ca3", width=1.4),
+                           name="level")
+            fr.add_hline(y=r.mol_m, line_dash="dot", line_color="crimson",
+                         annotation_text="min operating level",
+                         annotation_font=dict(size=10, color="crimson"))
+            fr.add_hline(y=r.fsl_m, line_dash="dot", line_color="gray",
+                         annotation_text="full supply level",
+                         annotation_position="bottom right",
+                         annotation_font=dict(size=10, color="gray"))
+            fr.update_layout(
+                height=280, margin=dict(t=30, b=0), showlegend=False,
+                title=dict(text=f"{r['name']} — altimetry level since "
+                           f"{hist.date.min().year} (m, EGM2008)",
+                           font=dict(size=13)))
+            st.plotly_chart(fr, use_container_width=True)
+        st.caption(f"Anchors: {r.anchor_note}. Red below 10% of the "
+                   "band, yellow below 25%. Source: NASA GWM radar "
+                   "altimetry (TOPEX→Sentinel-6A, ~10-day cadence, "
+                   "fetched on dekad days).")
+    return True
+
+
 def _hydro_section(_ciso):
     st.divider()
     st.header("Hydropower")
+    _has_res = _reservoir_block(_ciso)
     _has_cat = _catchment_block(_ciso)
     if _ciso != "ZMB":
-        if not _has_cat:
+        if not (_has_cat or _has_res):
             st.info("No hydropower monitor for this country.")
         return
     st.subheader("Hydropower — Lake Kariba (Zambia)")
