@@ -643,6 +643,7 @@ def _flood_section(_ciso):
         return "#a8c6e4", "quiet"
 
     fb = go.Figure()
+    _fl_bounds = None
     _oc = _dbdir.parent / "data/zones/country_outlines.geojson"
     if _oc.exists():
         for f in _json.loads(_oc.read_text())["features"]:
@@ -652,8 +653,16 @@ def _flood_section(_ciso):
             if f["geometry"]["type"] == "Polygon":
                 pls = [pls]
             for rings in pls:
-                fb.add_scatter(x=[q[0] for q in rings[0]],
-                               y=[q[1] for q in rings[0]],
+                _ox = [q[0] for q in rings[0]]
+                _oy = [q[1] for q in rings[0]]
+                if _fl_bounds is None:
+                    _fl_bounds = [min(_ox), min(_oy), max(_ox), max(_oy)]
+                else:
+                    _fl_bounds = [min(_fl_bounds[0], min(_ox)),
+                                  min(_fl_bounds[1], min(_oy)),
+                                  max(_fl_bounds[2], max(_ox)),
+                                  max(_fl_bounds[3], max(_oy))]
+                fb.add_scatter(x=_ox, y=_oy,
                                mode="lines", name="",
                                line=dict(color="#9a9a9a", width=1),
                                fill="toself", fillcolor="#f4f1ea",
@@ -696,8 +705,16 @@ def _flood_section(_ciso):
         title=dict(text="Current basin state (numbers = catchment "
                         f"wetness percentile){_reg_sfx}",
                    font=dict(size=13)),
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False, scaleanchor="x"),
+        # frame the COUNTRY, not the basin extents: level-7 basins
+        # legitimately cross borders (Akanyaru is the Burundi border
+        # river) and autoscaling let the spill dominate tiny countries
+        # like Rwanda
+        xaxis=dict(visible=False,
+                   range=None if _fl_bounds is None else
+                   [_fl_bounds[0] - 0.3, _fl_bounds[2] + 0.3]),
+        yaxis=dict(visible=False, scaleanchor="x",
+                   range=None if _fl_bounds is None else
+                   [_fl_bounds[1] - 0.3, _fl_bounds[3] + 0.3]),
         plot_bgcolor="white", dragmode="pan")
     st.plotly_chart(fb, use_container_width=True)
     st.caption("🔴 red = basin flood alert · 🟠 orange = armed/watch "
@@ -878,6 +895,7 @@ _zgj = _json.loads((_dbdir.parent / "data/zones/zones.geojson").read_text())
 _out_path = _dbdir.parent / "data/zones/country_outlines.geojson"
 
 fmap = go.Figure()
+_cn_bounds = None
 if _out_path.exists():
     for f in _json.loads(_out_path.read_text())["features"]:
         if f["properties"]["iso3"] != _ciso:
@@ -888,6 +906,13 @@ if _out_path.exists():
         for rings in polys:
             xs = [p[0] for p in rings[0]]
             ys = [p[1] for p in rings[0]]
+            if _cn_bounds is None:
+                _cn_bounds = [min(xs), min(ys), max(xs), max(ys)]
+            else:
+                _cn_bounds = [min(_cn_bounds[0], min(xs)),
+                              min(_cn_bounds[1], min(ys)),
+                              max(_cn_bounds[2], max(xs)),
+                              max(_cn_bounds[3], max(ys))]
             fmap.add_scatter(x=xs, y=ys, mode="lines",
                              line=dict(color="#9a9a9a", width=1),
                              fill="toself", fillcolor="#f4f1ea",
@@ -964,8 +989,12 @@ fmap.update_layout(
     title=dict(text=f"Current WRSI by growing region — "
                     f"{NAMES_CR.get(_ciso, _ciso)} (click a zone to open "
                     "its charts below)", font=dict(size=13)),
-    xaxis=dict(visible=False), yaxis=dict(visible=False,
-                                          scaleanchor="x"),
+    xaxis=dict(visible=False,
+               range=None if _cn_bounds is None else
+               [_cn_bounds[0] - 0.3, _cn_bounds[2] + 0.3]),
+    yaxis=dict(visible=False, scaleanchor="x",
+               range=None if _cn_bounds is None else
+               [_cn_bounds[1] - 0.3, _cn_bounds[3] + 0.3]),
     plot_bgcolor="white", dragmode="pan")
 _ev = st.plotly_chart(fmap, use_container_width=True,
                       on_select="rerun", key=f"hydmap_{_ciso}")
