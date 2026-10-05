@@ -28,7 +28,12 @@ git pull --rebase --autostash origin main
 # app.sqlite (observations >= 2010, ingest/app_db.py) instead.
 git add db/live.sqlite
 case $(date +%-d) in
-  3|8|13|18|23|28) ./venv/bin/python ingest/app_db.py && git add db/app.sqlite;;
+  3|8|13|18|23|28)
+    ./venv/bin/python ingest/app_db.py && git add db/app.sqlite
+    # refresh the Overview coverage map (non-fatal — map is cosmetic)
+    ./venv/bin/python compute/coverage_map.py && git add data/coverage_map.png \
+      || echo "WARN: coverage map regen failed"
+    ;;
 esac
 git diff --cached --quiet || git commit -m "data update $(date +%F)"
 git push origin main

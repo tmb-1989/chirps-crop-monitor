@@ -88,8 +88,10 @@ def main() -> int:
     out = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else \
         ROOT / "data" / "coverage_map.png"
     con = db.connect()
-    zmeta = {r[0]: {"crop": (r[1] or "maize").lower(), "seasons": r[2]}
-             for r in con.execute("SELECT zone_key, crop, seasons FROM zones")}
+    zmeta = {r[0]: {"crop": (r[1] or "maize").lower(), "seasons": r[2],
+                    "sector": r[3] or "staple"}
+             for r in con.execute(
+                 "SELECT zone_key, crop, seasons, sector FROM zones")}
     zones = json.loads((ROOT / "data/zones/zones.geojson").read_text())
     basins = json.loads((ROOT / "data/zones/basins.geojson").read_text())
     ne = json.loads((ROOT / "data/raw/ne_countries.geojson").read_text())
@@ -130,9 +132,15 @@ def main() -> int:
         cal = []
         for zk, g in crop.get(iso, []):
             m = zmeta.get(zk, {})
-            fc, ec = CROP_STYLE.get(m.get("crop"), CROP_STYLE["maize"])
+            if m.get("sector") == "export":
+                fc, ec = "#8e6aa8", "#5f4379"   # one style: export belt
+                entry = f"{m.get('crop')} (export)"
+            else:
+                fc, ec = CROP_STYLE.get(m.get("crop"),
+                                        CROP_STYLE["maize"])
+                entry = (f"{m.get('crop')}: "
+                         f"{season_txt(m.get('seasons', ''))}")
             draw_geom(ax, g, color=fc, alpha=0.55, ec=ec, lw=0.5, zorder=1)
-            entry = f"{m.get('crop')}: {season_txt(m.get('seasons', ''))}"
             if entry not in cal:
                 cal.append(entry)
         for name, lat, lon, cap, dx, dy in CITIES[iso]:
@@ -157,6 +165,8 @@ def main() -> int:
               label="Crop zone — small grains (wheat/barley)"),
         Patch(fc="#b0653a", alpha=0.55,
               label="Crop zone — sorghum (FEWS mask)"),
+        Patch(fc="#8e6aa8", alpha=0.55,
+              label="Export-crop belt (coffee/tea/tobacco/vanilla/cashew)"),
         Patch(fc="#3b7bbf", alpha=0.5, label="Flood basins"),
         Patch(fc="#f2efe9", ec="#8a8a8a", label="Country outline"),
         Line2D([], [], marker="*", ls="", ms=13, color="#222222",

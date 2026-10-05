@@ -417,6 +417,15 @@ def season_cum_frame(zk: str, a: int, b: int):
 
 
 if view == "Overview":
+    _map_png = DB.parent.parent / "data" / "coverage_map.png"
+    if _map_png.exists():
+        with st.expander("Geographic coverage — zones, basins, cities",
+                         expanded=False):
+            st.image(str(_map_png), use_container_width=True)
+            st.caption(
+                "Crop zones colored by crop (purple = export belts), "
+                "flood basins in blue, over Natural Earth outlines. "
+                "Regenerated on dekad days by compute/coverage_map.py.")
     drought_region_block(expander=False)
     st.subheader("Main-season cumulative rainfall by country")
     cols = st.columns(3)
