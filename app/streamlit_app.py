@@ -916,6 +916,31 @@ _zrisk_map = load("SELECT zone_key, wrsi, wrsi_in_season, spi3, sm, "
 _zgj = _json.loads((_dbdir.parent / "data/zones/zones.geojson").read_text())
 _out_path = _dbdir.parent / "data/zones/country_outlines.geojson"
 
+# ---- layer controls: the map is the tab's centrepiece --------------------
+_has_export = bool((_czones.sector == "export").any()) \
+    if "sector" in _czones.columns else False
+_bgj_path = _dbdir.parent / "data/zones/basins.geojson"
+_cbasins = []
+if _bgj_path.exists():
+    _cbasins = [f for f in _json.loads(_bgj_path.read_text())["features"]
+                if f["properties"].get("iso3") == _ciso]
+_lc1, _lc2 = st.columns([3, 2])
+with _lc1:
+    _crop_opts = ["All crops", "Staple only"] + \
+        (["Export only"] if _has_export else []) + ["Crops off"]
+    _crop_layer = st.radio("Crop layer", _crop_opts, horizontal=True,
+                           label_visibility="collapsed",
+                           key=f"lyr_crop_{_ciso}")
+with _lc2:
+    if _cbasins:
+        _show_flood = st.checkbox("Overlay flood basins", value=False,
+                                  key=f"lyr_flood_{_ciso}")
+    else:
+        _show_flood = False
+        st.caption("No flood layer for this country" +
+                   (" — hydro catchments arrive with P5"
+                    if _ciso == "ZMB" else ""))
+
 fmap = go.Figure()
 _cn_bounds = None
 if _out_path.exists():
@@ -954,6 +979,10 @@ for f in _zgj["features"]:
     meta = _czones.set_index("zone_key").loc[zk] \
         if zk in set(_czones.zone_key) else None
     sector = getattr(meta, "sector", None) or "staple"
+    if _crop_layer == "Crops off" or \
+            (_crop_layer == "Staple only" and sector == "export") or \
+            (_crop_layer == "Export only" and sector != "export"):
+        continue
     hover = (f"<b>{zone_label.get(zk, zk)}</b><br>"
              f"{(getattr(meta, 'crop', None) or '?')}"
              f"{' · export belt' if sector == 'export' else ''}<br>"
@@ -982,6 +1011,49 @@ for f in _zgj["features"]:
             showlegend=False)
         first = False
     _map_zones.append((zk, f, w, hover))
+# flood-basin overlay: current basin state over the crop zones
+if _show_flood:
+    _bstate = load(
+        "SELECT zone_key, tier, pct_normal, ante_pct, "
+        "MAX(granule_start) AS g FROM flood_state GROUP BY zone_key"
+    ).set_index("zone_key")
+
+    def _overlay_color(zk):
+        if zk not in _bstate.index:
+            return "#d8d8d8", "no data"
+        r = _bstate.loc[zk]
+        if r.tier >= 2:
+            return "#d95f4b", "basin flood ALERT"
+        if r.tier >= 1:
+            return "#ec9b3b", "basin WATCH (armed)"
+        if (r.pct_normal or 0) >= 150:
+            return "#e8c84d", "heavy pentad (≥150% of normal)"
+        return "#a8c6e4", "quiet"
+
+    for f in _cbasins:
+        p = f["properties"]
+        zk = p["zone_key"]
+        fc, blab = _overlay_color(zk)
+        r = _bstate.loc[zk] if zk in _bstate.index else None
+        hover = (f"<b>{p.get('name', zk)}</b> — {blab}<br>"
+                 + ("" if r is None else
+                    f"{0 if pd.isna(r.pct_normal) else r.pct_normal:.0f}% "
+                    "of normal pentad rain<br>"
+                    f"antecedent wetness "
+                    f"p{0 if pd.isna(r.ante_pct) else r.ante_pct:.0f} "
+                    f"(through {r.g})")
+                 + "<extra></extra>")
+        polys = f["geometry"]["coordinates"]
+        if f["geometry"]["type"] == "Polygon":
+            polys = [polys]
+        for rings in polys:
+            fmap.add_scatter(
+                x=[pt[0] for pt in rings[0]],
+                y=[pt[1] for pt in rings[0]],
+                mode="lines", fill="toself", fillcolor=fc, opacity=0.45,
+                name="", line=dict(color="#4a6fa5", width=1),
+                hovertemplate=hover, showlegend=False)
+
 # centroid markers: the WRSI value labels AND fat click targets —
 # clicking a polygon interior does not emit a plotly point selection,
 # clicking the (invisible) centroid marker does
@@ -1029,7 +1101,9 @@ except Exception:
 st.caption("Shading mirrors the WRSI chart bands: green ≥95, gold 80–94, "
            "orange 60–79, red <60; gray = off-season or no data. Purple "
            "edges mark export belts (clipped to their GAEZ crop "
-           "footprint). Hover for SPI-3, soil moisture and season.")
+           "footprint). Hover for SPI-3, soil moisture and season."
+           + (" Flood overlay: blue quiet, gold heavy pentad, orange "
+              "armed, red alerting." if _show_flood else ""))
 
 _opts = list(_czones.zone_key)
 _default = st.session_state.get("hyd_zone")
