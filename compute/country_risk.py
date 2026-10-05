@@ -36,7 +36,9 @@ from flood_signals import (FLOOD_MONTHS, PARAMS, TELEMETRY_ONLY,  # noqa: E402
 NAMES = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
          "RWA": "Rwanda", "UGA": "Uganda", "ZMB": "Zambia",
          "MWI": "Malawi", "ZWE": "Zimbabwe", "MOZ": "Mozambique",
-         "MDG": "Madagascar", "ZAF": "South Africa"}
+         "MDG": "Madagascar", "ZAF": "South Africa",
+         "NGA": "Nigeria", "GHA": "Ghana", "CIV": "Côte d'Ivoire",
+         "BEN": "Benin"}
 ORDER = list(NAMES)
 
 # ENSO impact per country and phase: (impact months, short note).
@@ -63,6 +65,15 @@ EXPOSURE = {
     "MOZ": {"elnino": SA_EN, "lanina": SA_LN},
     "MDG": {"elnino": SA_EN, "lanina": SA_LN},
     "ZAF": {"elnino": SA_EN, "lanina": SA_LN},
+    # West Africa (P7). Nigeria's monitored belt is Sahel/Sudan savanna:
+    # El Niño weakens the West African monsoon (JAS core), La Niña
+    # strengthens it (flood side in the north). The Guinea-coast trio
+    # (GHA/CIV/BEN) is deliberately ABSENT: coastal-bimodal rainfall has
+    # a weak, non-stationary ENSO link, so their ENSO cell stays gray
+    # ("no ENSO exposure profile") rather than inventing a loading.
+    "NGA": {"elnino": ({6, 7, 8, 9}, "weak WA monsoon — drought side "
+                       "(northern belt)"),
+            "lanina": ({7, 8, 9}, "strong monsoon — Sahel flood side")},
 }
 
 # staleness thresholds (days) before a factor goes gray
@@ -193,6 +204,11 @@ def enso_status(con, today: dt.date) -> dict:
         if stale:
             out[c] = ("gray", f"ONI stale (through {p['season']} "
                               f"{p['year']})", as_of)
+            continue
+        if c not in EXPOSURE:
+            out[c] = ("gray", "no ENSO exposure profile — coastal-"
+                              "bimodal West Africa has a weak, non-"
+                              "stationary ENSO link", as_of)
             continue
 
         # --- IOD-led OND short rains (EA minus Ethiopia) ---------------
