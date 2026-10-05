@@ -278,13 +278,25 @@ if view == "Overview":
         "southern Africa); 'developing' is detection, not a forecast. "
         "Drought = in-season WRSI, SPI-3 and soil moisture over crop "
         "zones; flood = the backtested basin flood-watch layer. "
-        "Hydropower = Lake Kariba level, usable storage and 4-week "
-        "drawdown rate (Zambia only so far). The IOD column is the "
+        "Hydropower = reservoir level vs its operating band plus the "
+        "drawdown-to-refill pace (Kariba via ZRA; Cahora Bassa, "
+        "Gibe III, Lake Victoria and Lake Malawi via satellite "
+        "altimetry), worst-of with catchment rainfall. The IOD column is the "
         "dipole in its own right for the OND short-rains countries "
         "(positive = wet East Africa; |DMI| ≥ 0.4 event, ≥ 0.75 "
         "flood-year class); East African ENSO cells are IOD-led too — "
         "El Niño without a positive dipole reads as an enhanced-rains "
         "watch, not an alert.")
+
+    # ---- recent status changes: always visible, right under the board ----
+    log = load("SELECT changed_at, country, factor, prev, status, reason "
+               "FROM country_risk_log ORDER BY changed_at DESC LIMIT 20")
+    st.subheader(f"Recent status changes ({len(log)})")
+    if log.empty:
+        st.caption("No changes recorded yet — the log starts with the "
+                   "board's second computation.")
+    else:
+        st.dataframe(log, hide_index=True, use_container_width=True)
 
     # ---- climate drivers: ENSO left, IOD right ---------------------------
     with st.expander("Climate drivers — weekly Niño 3.4, IOD"):
@@ -340,14 +352,6 @@ if view == "Overview":
     # ---- drought drill-down: one light per growing region ----------------
     drought_region_block(expander=True)
 
-    log = load("SELECT changed_at, country, factor, prev, status, reason "
-               "FROM country_risk_log ORDER BY changed_at DESC LIMIT 20")
-    with st.expander(f"Recent status changes ({len(log)})"):
-        if log.empty:
-            st.caption("No changes recorded yet — the log starts with the "
-                       "board's second computation.")
-        else:
-            st.dataframe(log, hide_index=True, use_container_width=True)
     _map_png = DB.parent.parent / "data" / "coverage_map.png"
     if _map_png.exists():
         with st.expander("Geographic coverage — zones, basins, cities",
