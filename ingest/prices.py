@@ -58,6 +58,7 @@ GRAIN_PAT = {
     "Maize": re.compile(r"^Maize(\s*\([^)]*\))?$", re.I),
     "Rice": re.compile(r"^Rice(\s*\([^)]*\))?$", re.I),
     "Wheat": re.compile(r"^Wheat(\s*\([^)]*\))?$", re.I),
+    "Sorghum": re.compile(r"^Sorghum(\s*\([^)]*\))?$", re.I),
 }
 # units convertible to KG
 UNIT_KG = {"KG": 1.0, "90 KG": 90.0, "50 KG": 50.0, "100 KG": 100.0,
@@ -73,6 +74,12 @@ def staples_for() -> dict:
             if r["iso3"] == "ETH":
                 cs.add("Wheat")
             out[r["iso3"]] = cs
+    # V3.1 multi-staple basket: every basket commodity gets a price series
+    basket = ECON.parent / "staple_basket.csv"
+    if basket.exists():
+        with open(basket) as f:
+            for r in csv.DictReader(f):
+                out.setdefault(r["iso3"], set()).add(r["commodity"])
     return out
 
 

@@ -1,0 +1,16 @@
+zone_key,iso3,commodity,share_national
+nga_kaduna,NGA,Sorghum,0.065
+nga_bauchi,NGA,Sorghum,0.084
+nga_kebbi,NGA,Sorghum,0.087
+nga_gombe,NGA,Sorghum,0.042
+nga_katsina,NGA,Sorghum,0.063
+nga_niger,NGA,Sorghum,0.03
+nga_zamfara,NGA,Sorghum,0.078
+nga_kano,NGA,Sorghum,0.075
+gha_northern,GHA,Sorghum,0.505
+gha_ashanti,GHA,Sorghum,0.0
+gha_eastern,GHA,Sorghum,0.0
+gha_upper_west,GHA,Sorghum,0.281
+gha_upper_east,GHA,Sorghum,0.211
+gha_brong_ahafo,GHA,Sorghum,0.001
+gha_volta,GHA,Sorghum,0.002

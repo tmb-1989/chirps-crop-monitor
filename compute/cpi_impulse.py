@@ -96,6 +96,34 @@ def load_econ():
     return pw, cw
 
 
+def load_basket(cw: dict) -> dict:
+    """iso3 -> [(commodity, share_food)] — the V3.1 multi-staple
+    basket. Falls back to the single cpi_weights staple for countries
+    the basket file does not list."""
+    basket = {}
+    p = ECON / "staple_basket.csv"
+    if p.exists():
+        with open(p) as f:
+            for r in csv.DictReader(f):
+                basket.setdefault(r["iso3"], []).append(
+                    (r["commodity"], float(r["share_food"])))
+    for iso3, r in cw.items():
+        basket.setdefault(iso3, [(r["staple_commodity"],
+                                  float(r["staple_share_food"]))])
+    return basket
+
+
+def load_extra_weights() -> list[dict]:
+    """Second-staple production shares measured over existing zones
+    (compute/basket_weights.py) — leg-B only; leg A keeps one row per
+    zone under its primary commodity."""
+    p = ECON / "basket_weights.csv"
+    if not p.exists():
+        return []
+    with open(p) as f:
+        return list(csv.DictReader(f))
+
+
 def season_windows(seasons: str) -> list[tuple[str, int, int]]:
     """'long_rains:3-9,second:8-11' -> [(name, start_month, end_month)]."""
     out = []
@@ -232,22 +260,21 @@ def fit_elasticity(con, iso3: str, zones: list[dict]) -> tuple[float, int]:
     return (e, len(pts)) if E_LO <= e <= E_HI else (E_PRIOR, len(pts))
 
 
-def country_impulse(con, iso3: str, zones: list[dict], cw: dict,
-                    today: dt.date, rng) -> dict | None:
-    """Monte Carlo the chain for one country; None when out of season.
-    Only zones growing the CPI staple aggregate — mixing commodities
-    double-counted land and pushed RWA coverage past 100%."""
-    zones = [z for z in zones
-             if z["commodity"] == cw["staple_commodity"]]
+def _commodity_impulse(con, iso3: str, czones: list[dict], today: dt.date,
+                       rng) -> dict | None:
+    """One commodity's leg of the chain: production-weighted shock
+    draws and the capped price move. Zones must all carry the same
+    commodity — mixing commodities double-counted land and pushed RWA
+    coverage past 100%."""
     live = []
-    for z in zones:
+    for z in czones:
         cur = current_wrsi(con, z["zone_key"], z["seasons"], today)
         if cur:
             live.append((z, *cur))
     if not live:
         return None
     coverage = sum(float(z["share_national"]) for z, *_ in live)
-    e_fit, n_fit = fit_elasticity(con, iso3, zones)
+    e_fit, n_fit = fit_elasticity(con, iso3, czones)
     shocks = np.zeros(DRAWS)
     for z, wrsi, as_of, prov, _season in live:
         draws, _ = leg_a(wrsi, KY.get(z["commodity"], 1.25), rng)
@@ -257,25 +284,71 @@ def country_impulse(con, iso3: str, zones: list[dict], cw: dict,
     shocks += (1 - coverage) * covered * rng.uniform(0, 0.5, DRAWS)
     elast = rng.triangular(E_LO, e_fit, E_HI, DRAWS)
     dp = np.minimum(elast * shocks, PARITY_CAP)
-    cpi = dp * float(cw["staple_share_food"]) \
-        * float(cw["food_cpi_weight"]) * 100
-    provisional = int(any(p for _, _, _, p, _ in live))
+    return {"live": live, "coverage": coverage, "e_fit": e_fit,
+            "n_fit": n_fit, "shocks": shocks, "dp": dp}
+
+
+def country_impulse(con, iso3: str, zones: list[dict], cw: dict,
+                    basket: list[tuple], today: dt.date,
+                    rng) -> dict | None:
+    """Monte Carlo the chain for one country; None when out of season.
+    V3.1: the impulse aggregates a BASKET of staples — each commodity
+    runs its own shock/elasticity/price leg against its own national
+    production and basket share, then the CPI contributions sum.
+    (Draws are independent across commodities; where the same zones
+    feed two staples — NGA maize+sorghum — the band is slightly
+    narrow. Flagged in assumptions.)"""
+    legs = {}
+    for commodity, share_food in basket:
+        czs = [z for z in zones if z["commodity"] == commodity]
+        leg = _commodity_impulse(con, iso3, czs, today, rng) \
+            if czs else None
+        if leg:
+            legs[commodity] = (leg, share_food)
+    if not legs:
+        return None
+    food_w = float(cw["food_cpi_weight"])
+    cpi = np.zeros(DRAWS)
+    for commodity, (leg, share_food) in legs.items():
+        cpi += leg["dp"] * share_food * food_w * 100
+    # headline shock/coverage: basket-share-weighted across commodities
+    wsum = sum(sf for _, sf in legs.values())
+    shocks = sum(leg["shocks"] * sf for leg, sf in legs.values()) / wsum
+    coverage = sum(leg["coverage"] * sf
+                   for leg, sf in legs.values()) / wsum
+    # headline elasticity: the primary staple's fit
+    prim = cw["staple_commodity"]
+    e_show = legs[prim][0]["e_fit"] if prim in legs else \
+        next(iter(legs.values()))[0]["e_fit"]
+    all_live = [t for leg, _ in legs.values() for t in leg["live"]]
+    provisional = int(any(p for _, _, _, p, _ in all_live))
     q = lambda a, p: float(np.percentile(a, p))  # noqa: E731
     return {
-        "season": ", ".join(sorted({f"{sn} ({a[:7]})" for _, _, a, _, sn in live})),
+        "season": ", ".join(sorted({f"{sn} ({a[:7]})"
+                                    for _, _, a, _, sn in all_live})),
         "coverage": round(coverage, 3),
         "out_shock": q(shocks, 50), "out_p10": q(shocks, 10),
         "out_p90": q(shocks, 90),
         "cpi_pp": q(cpi, 50), "cpi_p10": q(cpi, 10), "cpi_p90": q(cpi, 90),
-        "elasticity": round(e_fit, 2), "provisional": provisional,
+        "elasticity": round(e_show, 2), "provisional": provisional,
         "inputs_json": json.dumps({
-            "zones": {z["zone_key"]: {"wrsi": w, "as_of": a,
-                                      "season": sn,
-                                      "share": z["share_national"]}
-                      for z, w, a, _, sn in live},
-            "elasticity_fit_seasons": n_fit,
+            "basket": {c: {"share_food": sf,
+                           "coverage": round(leg["coverage"], 3),
+                           "elasticity": round(leg["e_fit"], 2),
+                           "fit_seasons": leg["n_fit"],
+                           "shock_p50": float(np.percentile(
+                               leg["shocks"], 50)),
+                           "cpi_pp_p50": float(np.percentile(
+                               leg["dp"] * sf * food_w * 100, 50))}
+                       for c, (leg, sf) in legs.items()},
+            "zones": {f"{z['zone_key']}:{z['commodity']}":
+                      {"wrsi": w, "as_of": a, "season": sn,
+                       "share": z["share_national"]}
+                      for leg, _ in legs.values()
+                      for z, w, a, _, sn in leg["live"]},
             "assumptions": "Ky FAO33; parity cap 50%; uncovered 0-50% "
-                           "of covered shock; ceteris paribus FX/policy"}),
+                           "of covered shock; ceteris paribus FX/policy; "
+                           "V3.1 basket legs drawn independently"}),
     }
 
 
@@ -335,29 +408,38 @@ def main() -> int:
         con.execute("ALTER TABLE live.zone_output_shock ADD COLUMN "
                     "season TEXT")
     pw, cw = load_econ()
+    basket = load_basket(cw)
+    extra = load_extra_weights()
     seasons = {r[0]: r[1] for r in con.execute(
         "SELECT zone_key, seasons FROM zones")}
-    for z in pw:
+    for z in pw + extra:
         z["seasons"] = seasons.get(z["zone_key"], "")
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
     pw = [z for z in pw if z["commodity"] in KY]  # V2.3: no perennials
+    extra = [z for z in extra if z["commodity"] in KY]
     if args.hindcast:
         hindcast(con, pw)
         return 0
 
     if args.calibrate:
-        for iso3 in sorted({z["iso3"] for z in pw}):
-            zs = [z for z in pw if z["iso3"] == iso3 and z["seasons"]]
-            e, n = fit_elasticity(con, iso3, zs) if zs else (E_PRIOR, 0)
-            if e != E_PRIOR:
-                src = f"fitted on {n} seasons"
-            elif n < 6:
-                src = f"prior ({n} usable seasons — too few)"
-            else:
-                src = f"prior (fit on {n} seasons fell outside " \
-                      f"[{E_LO}, {E_HI}])"
-            print(f"{iso3}: elasticity {e:.2f} [{src}]")
+        allw = pw + extra
+        for iso3 in sorted({z["iso3"] for z in allw}):
+            for commodity, _sf in basket.get(iso3, []):
+                zs = [z for z in allw if z["iso3"] == iso3
+                      and z["seasons"] and z["commodity"] == commodity]
+                e, n = fit_elasticity(con, iso3, zs) if zs else (E_PRIOR, 0)
+                if not zs:
+                    print(f"{iso3} {commodity}: no zones — skipped")
+                    continue
+                if e != E_PRIOR:
+                    src = f"fitted on {n} seasons"
+                elif n < 6:
+                    src = f"prior ({n} usable seasons — too few)"
+                else:
+                    src = f"prior (fit on {n} seasons fell outside " \
+                          f"[{E_LO}, {E_HI}])"
+                print(f"{iso3} {commodity}: elasticity {e:.2f} [{src}]")
         return 0
 
     # ---- leg A per zone ---------------------------------------------------
@@ -387,10 +469,13 @@ def main() -> int:
               f"{shock:.0%} ({'prov' if prov else 'final'})")
 
     # ---- leg B per country ------------------------------------------------
+    # V3.1: second-staple rows (basket_weights.csv) join here — leg A
+    # above stays one row per zone under its primary commodity
     for iso3 in sorted({z["iso3"] for z in pw}):
-        zs = [z for z in pw if z["iso3"] == iso3 and z["seasons"]]
-        r = country_impulse(con, iso3, zs, cw[iso3], today, rng) if zs \
-            else None
+        zs = [z for z in pw + extra
+              if z["iso3"] == iso3 and z["seasons"]]
+        r = country_impulse(con, iso3, zs, cw[iso3], basket[iso3],
+                            today, rng) if zs else None
         if r is None:
             con.execute("DELETE FROM cpi_impulse WHERE country=?", (iso3,))
             print(f"{iso3}: out of season — no impulse")

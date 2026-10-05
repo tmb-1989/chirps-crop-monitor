@@ -67,6 +67,7 @@ TARGETS = [
     ("NGA", "cocoa", "Stimulants", (7.10, 5.05)),     # Ondo State
     ("TZA", "cashew", "CropsNES", (-10.55, 39.90)),   # Mtwara
     ("MOZ", "cashew", "CropsNES", (-15.10, 39.30)),   # Nampula
+    ("BEN", "cotton", "Cotton", None),                # Alibori/Banikoara peak
 ]
 EXCLUSION_RADIUS_CELLS = 12   # ~1 degree at 5 arcmin
 

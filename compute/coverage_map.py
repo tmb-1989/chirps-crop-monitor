@@ -179,7 +179,8 @@ def main() -> int:
         Patch(fc="#b0653a", alpha=0.55,
               label="Crop zone — sorghum (FEWS mask)"),
         Patch(fc="#8e6aa8", alpha=0.55,
-              label="Export-crop belt (coffee/tea/tobacco/vanilla/cashew)"),
+              label="Export-crop belt (coffee/tea/cocoa/tobacco/"
+                    "vanilla/cashew/cotton)"),
         Patch(fc="#3b7bbf", alpha=0.5, label="Flood basins"),
         Patch(fc="#f2efe9", ec="#8a8a8a", label="Country outline"),
         Line2D([], [], marker="*", ls="", ms=13, color="#222222",

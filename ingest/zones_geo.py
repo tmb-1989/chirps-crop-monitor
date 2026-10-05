@@ -57,7 +57,8 @@ def fetch_polygon(vector: str, lat: float, lon: float):
 BELT_CELL_FRAC = 0.05
 EXPORT_RASTER = {"coffee": "Stimulants", "tea": "Stimulants",
                  "cocoa": "Stimulants", "tobacco": "Tobacco",
-                 "vanilla": "CropsNES", "cashew": "CropsNES"}
+                 "vanilla": "CropsNES", "cashew": "CropsNES",
+                 "cotton": "Cotton"}
 
 
 def clip_to_crop_footprint(geom, crop: str):
@@ -113,7 +114,10 @@ def main() -> int:
                                      "label_lat": round(pt.y, 4)}})
         print(f"{zone_key}: {geom.geom_type}, area {geom.area:.2f} deg2")
     for ckey, (iso3, name, members) in COMPOSITES.items():
-        geom = unary_union([geoms[m] for m in members])
+        # buffer(0) heals invalid WFS polygons (side-location conflict
+        # in the ken_grain_basket union, 5 Oct 2026 — same class as
+        # mdg_vanilla in clip_to_crop_footprint)
+        geom = unary_union([geoms[m].buffer(0) for m in members])
         feats.append({"type": "Feature", "geometry": mapping(geom),
                       "properties": {"zone_key": ckey, "iso3": iso3,
                                      "name": name}})

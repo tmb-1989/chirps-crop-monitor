@@ -16,6 +16,7 @@ EXPORT_ZONES = {
     "nga_cocoa": ('NGA', 'Ondo cocoa belt (export)', 7.1, 5.05, [('year_round', 1, 12)]),
     "tza_cashew": ('TZA', 'Mtwara cashew belt (export)', -10.55, 39.9, [('year_round', 1, 12)]),
     "moz_cashew": ('MOZ', 'Nampula cashew belt (export)', -15.1, 39.3, [('year_round', 1, 12)]),
+    "ben_cotton": ('BEN', 'Borgou cotton belt (export)', 10.4583, 2.4583, [('year_round', 1, 12)]),
 }
 EXPORT_CROP = {
     "eth_coffee": "coffee",
@@ -34,4 +35,5 @@ EXPORT_CROP = {
     "nga_cocoa": "cocoa",
     "tza_cashew": "cashew",
     "moz_cashew": "cashew",
+    "ben_cotton": "cotton",
 }
