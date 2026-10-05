@@ -64,19 +64,30 @@ PARAMS = {
     "TZA": dict(arm=90, hot=90, consec=1, floor=5, region=(2, 1)),
     "RWA": dict(arm=90, hot=90, consec=2, floor=5, region=(2, 1)),
     "UGA": dict(arm=90, hot=95, consec=1, floor=5, region=(2, 1)),
-    # --- P6 (5 Oct 2026): PROVISIONAL defaults pending the pentad
-    # backfill + flood_calibrate run. Cyclone-belt disasters are often
-    # single-basin landfalls, hence region=(1, 1).
-    "MOZ": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
-    "MWI": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
-    "MDG": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
-    "ZMB": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
-    "ZWE": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
-    "ZAF": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
-    "NGA": dict(arm=80, hot=90, consec=2, floor=15, region=(1, 1)),
-    "GHA": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
-    "CIV": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
-    "BEN": dict(arm=80, hot=95, consec=1, floor=15, region=(1, 1)),
+    # --- P6 calibrated 5 Oct 2026 (flood_calibrate over the full
+    # 1981-2026 pentad backfill, episodes 1999+). Selection: the F1
+    # winner, EXCEPT where the F1 winner catches under half the MAJOR
+    # events while an alternative catches >=75% — a sovereign-risk
+    # layer that misses Idai or the 2022 Lokoja crest is tuned wrong,
+    # so MOZ and NGA take the high-major-recall config (stated rule,
+    # not per-country hand-tuning).
+    # Calibration precision/recall/major-recall:
+    #   MOZ 18/78/88(maj rule)  MWI 25/60/50  MDG 17/55/62
+    #   ZMB 17/17/0 (weak: Barotse is slow-onset, driven by Angolan
+    #   headwater rain outside the basins — level, not burst)
+    #   ZWE 7/50/33 (weak)  ZAF 33/20/33 (weak: KZN mesoscale coastal)
+    #   NGA 13/80/75(maj rule)  GHA 100/25/33  CIV 25/33/100(maj)
+    #   BEN 17/33/100(maj)
+    "MOZ": dict(arm=80, hot=90, consec=1, floor=25, region=(2, 1)),
+    "MWI": dict(arm=80, hot=95, consec=1, floor=25, region=(2, 1)),
+    "MDG": dict(arm=80, hot=90, consec=1, floor=25, region=(1, 1)),
+    "ZMB": dict(arm=90, hot=97, consec=1, floor=25, region=(2, 1)),
+    "ZWE": dict(arm=90, hot=90, consec=1, floor=25, region=(1, 1)),
+    "ZAF": dict(arm=90, hot=97, consec=1, floor=25, region=(2, 1)),
+    "NGA": dict(arm=90, hot=90, consec=1, floor=25, region=(1, 1)),
+    "GHA": dict(arm=80, hot=90, consec=2, floor=5, region=(2, 1)),
+    "CIV": dict(arm=90, hot=97, consec=2, floor=25, region=(1, 1)),
+    "BEN": dict(arm=80, hot=97, consec=2, floor=25, region=(1, 1)),
 }
 ALERT_HOT = 97  # alert tier: hot pentad also above this percentile
 

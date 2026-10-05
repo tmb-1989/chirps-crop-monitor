@@ -37,15 +37,33 @@ def main() -> int:
     tables = [r[0] for r in con.execute(
         "SELECT name FROM sqlite_master WHERE type='table' "
         "AND name NOT LIKE 'sqlite_%'")]
+    # per-table trims — what the app actually renders (P6 pushed the
+    # untrimmed copy to 111 MB, over GitHub's hard limit):
+    # - observations: >= CUTOFF, minus raw basin pentads (every flood
+    #   panel draws from flood_state, never the raw zonal means)
+    # - flood_state: >= 1998 (the app's oldest flood view is the
+    #   'Full history 1998-2026' expander; percentile climatologies
+    #   are computed upstream, so the trim touches no baseline)
+    # - dekad_metrics: >= CUTOFF (SPI panel shows the last 5 years)
+    # - revisions: audit trail, never queried by the app — dropped
+    WHERE = {
+        "observations": (f" WHERE granule_start >= '{CUTOFF}' AND "
+                         "dataset NOT IN ('chirps3local_pentad_data',"
+                         "'chirps3local-prelim_pentad_data')"),
+        "flood_state": " WHERE granule_start >= '1998-01-01'",
+        "dekad_metrics": f" WHERE granule_start >= '{CUTOFF}'",
+        "revisions": None,   # skipped entirely
+    }
     for t in tables:
+        if t in WHERE and WHERE[t] is None:
+            continue
         sql = con.execute("SELECT sql FROM sqlite_master WHERE name=?",
                           (t,)).fetchone()[0]
         sql = sql.replace("CREATE TABLE IF NOT EXISTS ", "CREATE TABLE ")
         con.execute(sql.replace(f"CREATE TABLE {t}",
                                 f"CREATE TABLE app.{t}", 1))
-        where = f" WHERE granule_start >= '{CUTOFF}'" \
-            if t == "observations" else ""
-        con.execute(f"INSERT INTO app.{t} SELECT * FROM {t}{where}")
+        con.execute(f"INSERT INTO app.{t} SELECT * FROM {t}"
+                    f"{WHERE.get(t, '')}")
     con.commit()
     n = con.execute("SELECT count(*) FROM app.observations").fetchone()[0]
     con.execute("VACUUM app")
