@@ -5,12 +5,13 @@ expansion) exceeds GitHub's 100 MB hard limit, so it stays local-only
 (gitignored). The deployed dashboard instead reads this trimmed copy:
 every table in full EXCEPT observations, which is cut to >= CUTOFF.
 
-CUTOFF = 2010: the app's oldest observation-based comparisons are the
-2015-16 / 2023-24 El Niño episode windows; long-run flood history
-renders from flood_state, which is kept complete. Climatologies (SPI,
-pctm, flood percentiles) are computed upstream into dekad_metrics /
-flood_state before this split, so trimming observations does not
-touch any baseline.
+CUTOFF = 2012 (was 2010; bumped with the P7 West Africa expansion to
+keep app.sqlite under the limit at 105 zones): the app's oldest
+observation-based comparisons are the 2015-16 / 2023-24 El Niño
+episode windows; long-run flood history renders from flood_state,
+which is kept complete. Climatologies (SPI, pctm, flood percentiles)
+are computed upstream into dekad_metrics / flood_state before this
+split, so trimming observations does not touch any baseline.
 
 Run by run_update.sh on dekad days, before the git add.
 """
@@ -22,7 +23,7 @@ import sqlite3
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / "db" / "monitor.sqlite"
 DST = ROOT / "db" / "app.sqlite"
-CUTOFF = "2010-01-01"
+CUTOFF = "2012-01-01"
 
 
 def main() -> int:

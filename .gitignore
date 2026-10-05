@@ -10,3 +10,4 @@ data/ntfy_topic.txt
 data/alert_email.json
 db/monitor.sqlite
 venv-deploy/
+data/zones/weights.npz

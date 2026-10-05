@@ -33,8 +33,8 @@ CROP_RASTER = {"maize": "Maize", "small grains": "Wheat",
                "sorghum": "Sorghum", "rice": "Rice",
                # export crops (V2.3): GAEZ proxy rasters
                "coffee": "Stimulants", "tea": "Stimulants",
-               "tobacco": "Tobacco", "vanilla": "CropsNES",
-               "cashew": "CropsNES"}
+               "cocoa": "Stimulants", "tobacco": "Tobacco",
+               "vanilla": "CropsNES", "cashew": "CropsNES"}
 
 
 def main() -> int:

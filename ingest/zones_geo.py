@@ -56,8 +56,8 @@ def fetch_polygon(vector: str, lat: float, lon: float):
 # SCOPING-V2.3 / the 5 Oct 2026 Hydrology mockup).
 BELT_CELL_FRAC = 0.05
 EXPORT_RASTER = {"coffee": "Stimulants", "tea": "Stimulants",
-                 "tobacco": "Tobacco", "vanilla": "CropsNES",
-                 "cashew": "CropsNES"}
+                 "cocoa": "Stimulants", "tobacco": "Tobacco",
+                 "vanilla": "CropsNES", "cashew": "CropsNES"}
 
 
 def clip_to_crop_footprint(geom, crop: str):

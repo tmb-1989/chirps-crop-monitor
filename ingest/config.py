@@ -107,6 +107,12 @@ VECTOR_OVERRIDES = {
     # EWX only; the local raster pipeline keeps the crop polygon for this
     # zone (built before the override), so local vs EWX bases differ here
     "zaf_mpumalanga": ADMIN1_VECTOR,
+    # P7 West Africa zones with the same all-null server gap
+    "ben_mono": ADMIN1_VECTOR,
+    "gha_northern": ADMIN1_VECTOR,
+    "gha_upper_east": ADMIN1_VECTOR,
+    "gha_upper_west": ADMIN1_VECTOR,
+    "moz_zambezia3": ADMIN1_VECTOR,
 }
 # export zones are admin-1 by design (staple masks are the wrong
 # footprint for perennials)

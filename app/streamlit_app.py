@@ -103,7 +103,7 @@ tracking as bad as the worst of those events.
 """)
 
 today = dt.date.today()
-view = st.sidebar.radio("View", ["Overview", "Country"])
+view = st.sidebar.radio("View", ["Overview", "Country", "CPI impulse"])
 # ======================== COUNTRY RISK ====================================
 NAMES_CR = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
             "RWA": "Rwanda", "UGA": "Uganda", "ZMB": "Zambia",
@@ -337,56 +337,6 @@ if view == "Overview":
                            "negative = failed short rains (2020-22). "
                            "DMI lags ~1-2 months (OISST monthly).")
 
-    # ---- food-CPI impulse (SCOPING-CPI) ----------------------------------
-    try:
-        imp = load("SELECT * FROM cpi_impulse ORDER BY cpi_pp DESC")
-    except Exception:
-        imp = pd.DataFrame()
-    if not imp.empty:
-        with st.expander(
-                f"Food-CPI impulse — {len(imp)} country(ies) in season",
-                expanded=bool((imp.cpi_pp >= 1).any())):
-            fc = go.Figure()
-            names = [NAMES_CR.get(c, c) for c in imp.country]
-            fc.add_bar(
-                x=names, y=imp.cpi_pp,
-                error_y=dict(type="data", symmetric=False,
-                             array=imp.cpi_p90 - imp.cpi_pp,
-                             arrayminus=imp.cpi_pp - imp.cpi_p10),
-                marker_color=["crimson" if v >= 2 else "orange"
-                              if v >= 1 else "seagreen"
-                              for v in imp.cpi_pp])
-            fc.update_layout(
-                title="Estimated food-CPI impulse from in-season crop "
-                      "water stress (pp, P10–P90)",
-                height=300, margin=dict(t=40, b=0), showlegend=False)
-            st.plotly_chart(fc, use_container_width=True)
-            dt_ = imp.assign(
-                Country=names,
-                Shock=[f"{r.out_shock:.0%} [{r.out_p10:.0%}–{r.out_p90:.0%}]"
-                       for _, r in imp.iterrows()],
-                Impulse=[f"+{r.cpi_pp:.1f}pp [{r.cpi_p10:.1f}–"
-                         f"{r.cpi_p90:.1f}]" for _, r in imp.iterrows()],
-                Coverage=[f"{r.coverage:.0%}" for _, r in imp.iterrows()],
-                Elasticity=imp.elasticity,
-                Status=["provisional (in season)" if r.provisional
-                        else "season complete" for _, r in imp.iterrows()],
-            )[["Country", "Shock", "Impulse", "Coverage", "Elasticity",
-               "Status"]]
-            st.dataframe(dt_, hide_index=True, use_container_width=True)
-            st.caption(
-                "Chain: zone WRSI → FAO Ky yield loss → production-"
-                "weighted national shock (Coverage = share of national "
-                "production our zones represent — the rest is assumed "
-                "0–50% as affected) → staple price via elasticity "
-                "(fitted on our own WRSI/price history where usable, "
-                "IMF-informed prior 1.5 otherwise; capped at +50% import "
-                "parity) → CPI via food weight × staple share. Ceteris "
-                "paribus on FX and policy (export bans, subsidies, duty "
-                "waivers all break the elasticity — Kenya 2026 did all "
-                "three). The band is the estimate; the midpoint is not. "
-                "See SCOPING-CPI.md.")
-
     # ---- drought drill-down: one light per growing region ----------------
     drought_region_block(expander=True)
 
@@ -407,6 +357,63 @@ if view == "Overview":
                 "Crop zones colored by crop (purple = export belts), "
                 "flood basins in blue, over Natural Earth outlines. "
                 "Regenerated on dekad days by compute/coverage_map.py.")
+    st.stop()
+
+
+# ======================== CPI IMPULSE TAB (SCOPING-CPI) =====
+if view == "CPI impulse":
+    st.title("Food-CPI impulse")
+    st.caption("Estimated pass-through of in-season crop water stress to "
+               "food CPI, per country. Positive IOD/La Niña flood years "
+               "are NOT captured — this is the drought channel only.")
+    try:
+        imp = load("SELECT * FROM cpi_impulse ORDER BY cpi_pp DESC")
+    except Exception:
+        imp = pd.DataFrame()
+    if imp.empty:
+        st.info("No country is currently in a monitored growing season — "
+                "the impulse table refreshes as seasons open.")
+        st.stop()
+    names = [NAMES_CR.get(c, c) for c in imp.country]
+    fc = go.Figure()
+    fc.add_bar(
+        x=names, y=imp.cpi_pp,
+        error_y=dict(type="data", symmetric=False,
+                     array=imp.cpi_p90 - imp.cpi_pp,
+                     arrayminus=imp.cpi_pp - imp.cpi_p10),
+        marker_color=["crimson" if v >= 2 else "orange"
+                      if v >= 1 else "seagreen"
+                      for v in imp.cpi_pp])
+    fc.update_layout(
+        title="Estimated food-CPI impulse from in-season crop "
+              "water stress (pp, P10–P90)",
+        height=360, margin=dict(t=40, b=0), showlegend=False)
+    st.plotly_chart(fc, use_container_width=True)
+    dt_ = imp.assign(
+        Country=names,
+        Shock=[f"{r.out_shock:.0%} [{r.out_p10:.0%}–{r.out_p90:.0%}]"
+               for _, r in imp.iterrows()],
+        Impulse=[f"+{r.cpi_pp:.1f}pp [{r.cpi_p10:.1f}–"
+                 f"{r.cpi_p90:.1f}]" for _, r in imp.iterrows()],
+        Coverage=[f"{r.coverage:.0%}" for _, r in imp.iterrows()],
+        Elasticity=imp.elasticity,
+        Status=["provisional (in season)" if r.provisional
+                else "season complete" for _, r in imp.iterrows()],
+    )[["Country", "Shock", "Impulse", "Coverage", "Elasticity",
+       "Status"]]
+    st.dataframe(dt_, hide_index=True, use_container_width=True)
+    st.caption(
+        "Chain: zone WRSI → FAO Ky yield loss → production-"
+        "weighted national shock (Coverage = share of national "
+        "production our zones represent — the rest is assumed "
+        "0–50% as affected) → staple price via elasticity "
+        "(fitted on our own WRSI/price history where usable, "
+        "IMF-informed prior 1.5 otherwise; capped at +50% import "
+        "parity) → CPI via food weight × staple share. Ceteris "
+        "paribus on FX and policy (export bans, subsidies, duty "
+        "waivers all break the elasticity — Kenya 2026 did all "
+        "three). The band is the estimate; the midpoint is not. "
+        "See SCOPING-CPI.md.")
     st.stop()
 
 
