@@ -33,6 +33,10 @@ case $(date +%-d) in
     # refresh the Overview coverage map (non-fatal — map is cosmetic)
     ./venv/bin/python compute/coverage_map.py && git add data/coverage_map.png \
       || echo "WARN: coverage map regen failed"
+    # deploy smoke: the app must import with only requirements.txt
+    # packages (emails on failure; never blocks the data push)
+    ./venv/bin/python compute/deploy_smoke.py \
+      || echo "WARN: deploy smoke test FAILED — deployed app will crash"
     ;;
 esac
 git diff --cached --quiet || git commit -m "data update $(date +%F)"
