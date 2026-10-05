@@ -296,6 +296,10 @@ if view == "Overview":
         st.caption("No changes recorded yet — the log starts with the "
                    "board's second computation.")
     else:
+        _dotted = lambda s: s.map(  # noqa: E731
+            lambda v: f"{DOT.get(v, '⚪')} {v}" if pd.notna(v) else v)
+        log = log.assign(prev=_dotted(log.prev),
+                         status=_dotted(log.status))
         st.dataframe(log, hide_index=True, use_container_width=True)
 
     # ---- climate drivers: ENSO left, IOD right ---------------------------
