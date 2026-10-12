@@ -21,7 +21,7 @@ OUT = ROOT / "data" / "zones" / "basins.geojson"
 BASINS = {
     # --- Kenya (pilot) ---
     "bas_nzoia_hw":  (1.05, 35.05, "Nzoia headwaters (Cherangani)", "KEN"),
-    "bas_nzoia_low": (0.12, 34.10, "Lower Nzoia (Budalangi plain)", "KEN"),
+    "bas_nzoia_low": (0.14, 34.03, "Lower Nzoia (Budalangi plain)", "KEN"),
     "bas_tana_hw":   (-0.45, 36.85, "Tana headwaters (Aberdares/Mt Kenya)",
                       "KEN"),
     "bas_tana_mid":  (-0.45, 39.65, "Tana at Garissa", "KEN"),
@@ -49,7 +49,7 @@ BASINS = {
     "bas_mwanza":    (-2.55, 32.90, "Lake Victoria south shore (Mwanza)",
                       "TZA"),
     "bas_wami":      (-6.83, 36.98, "Wami/Mkondoa at Kilosa", "TZA"),
-    "bas_lindi":     (-9.90, 39.40, "Lindi/Mtwara coast", "TZA"),
+    "bas_lindi":     (-9.9968, 39.7144, "Lindi/Mtwara coast", "TZA"),
     # --- Rwanda ---
     "bas_nyabarongo": (-1.95, 30.00, "Nyabarongo (Kigali)", "RWA"),
     "bas_sebeya":    (-1.65, 29.30, "Sebeya / NW highlands (Rubavu)", "RWA"),
@@ -122,11 +122,21 @@ BASINS = {
 }
 
 # headwater -> downstream pairing with approximate routing lag (days)
+#
+# bas_shabelle_hw -> bas_shabelle_mid removed per AUDIT-FLOOD-BASINS.md
+# (v2): walking NEXT_DOWN from bas_shabelle_hw's HYBAS_ID (1070928960) for
+# 25 hops reaches the Shabelle-Jubba system's terminal sink (1070008100)
+# without ever passing through bas_shabelle_mid's HYBAS_ID (1070984130) —
+# both basins share the same MAIN_BAS, so it is the same river system, but
+# the specific upstream->downstream routing path this pairing claimed is
+# not supported by the HydroBASINS pour-point graph. Each basin's own
+# polygon selection is independently fine; only the cross-basin lag label
+# is pulled. Re-add only once the actual confluence is verified against a
+# proper Shabelle-Jubba sub-basin map (e.g. FAO/FEWS NET delineation).
 DOWNSTREAM = {
     "bas_nzoia_hw": ("bas_nzoia_low", "2-5"),
     "bas_tana_hw": ("bas_tana_mid", "3-7"),
     "bas_awash_hw": ("bas_awash_mid", "2-5"),
-    "bas_shabelle_hw": ("bas_shabelle_mid", "4-8"),
     "bas_kilombero": ("bas_rufiji_low", "3-7"),
 }
 
