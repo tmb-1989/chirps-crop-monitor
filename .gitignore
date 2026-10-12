@@ -10,3 +10,6 @@ data/ntfy_topic.txt
 .env
 data/.dahiti_last_run
 data/alert_email.json
+db/monitor.sqlite
+venv-deploy/
+data/zones/weights.npz

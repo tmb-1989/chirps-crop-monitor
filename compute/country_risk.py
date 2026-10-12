@@ -36,7 +36,9 @@ from flood_signals import (FLOOD_MONTHS, PARAMS, TELEMETRY_ONLY,  # noqa: E402
 NAMES = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
          "RWA": "Rwanda", "UGA": "Uganda", "ZMB": "Zambia",
          "MWI": "Malawi", "ZWE": "Zimbabwe", "MOZ": "Mozambique",
-         "MDG": "Madagascar", "ZAF": "South Africa"}
+         "MDG": "Madagascar", "ZAF": "South Africa",
+         "NGA": "Nigeria", "GHA": "Ghana", "CIV": "Côte d'Ivoire",
+         "BEN": "Benin"}
 ORDER = list(NAMES)
 
 # ENSO impact per country and phase: (impact months, short note).
@@ -63,6 +65,15 @@ EXPOSURE = {
     "MOZ": {"elnino": SA_EN, "lanina": SA_LN},
     "MDG": {"elnino": SA_EN, "lanina": SA_LN},
     "ZAF": {"elnino": SA_EN, "lanina": SA_LN},
+    # West Africa (P7). Nigeria's monitored belt is Sahel/Sudan savanna:
+    # El Niño weakens the West African monsoon (JAS core), La Niña
+    # strengthens it (flood side in the north). The Guinea-coast trio
+    # (GHA/CIV/BEN) is deliberately ABSENT: coastal-bimodal rainfall has
+    # a weak, non-stationary ENSO link, so their ENSO cell stays gray
+    # ("no ENSO exposure profile") rather than inventing a loading.
+    "NGA": {"elnino": ({6, 7, 8, 9}, "weak WA monsoon — drought side "
+                       "(northern belt)"),
+            "lanina": ({7, 8, 9}, "strong monsoon — Sahel flood side")},
 }
 
 # staleness thresholds (days) before a factor goes gray
@@ -119,6 +130,7 @@ CREATE TABLE IF NOT EXISTS live.zone_risk (
     sm       REAL,
     as_of    TEXT,
     computed_at TEXT,
+    season   TEXT,
     PRIMARY KEY (zone_key, factor)
 );
 """
@@ -130,16 +142,27 @@ def _age(date_str: str | None, today: dt.date) -> int:
     return (today - dt.date.fromisoformat(date_str[:10])).days
 
 
-def in_season(seasons: str | None, month: int) -> bool:
-    """True if `month` falls in any of the zone's season windows
-    ('belg:2-5,kiremt:6-9'; cross-year like 'main:10-4' supported)."""
+def window_of(seasons: str | None, month: int) -> tuple | None:
+    """(name, start_month, end_month) of the season window containing
+    `month` ('belg:2-5,kiremt:6-9'; cross-year 'main:10-4' supported).
+    V2.5: bimodal zones report which season a reading belongs to."""
     for tok in (seasons or "").split(","):
-        if not tok:
+        if ":" not in tok:
             continue
-        a, b = map(int, tok.split(":")[1].split("-"))
+        name, ab = tok.split(":")
+        a, b = map(int, ab.split("-"))
         if (a <= month <= b) if a <= b else (month >= a or month <= b):
-            return True
-    return False
+            return name.replace("_", " "), a, b
+    return None
+
+
+def season_of(seasons: str | None, month: int) -> str | None:
+    w = window_of(seasons, month)
+    return w[0] if w else None
+
+
+def in_season(seasons: str | None, month: int) -> bool:
+    return season_of(seasons, month) is not None
 
 
 # ---------------------------------------------------------------- factors
@@ -181,6 +204,11 @@ def enso_status(con, today: dt.date) -> dict:
         if stale:
             out[c] = ("gray", f"ONI stale (through {p['season']} "
                               f"{p['year']})", as_of)
+            continue
+        if c not in EXPOSURE:
+            out[c] = ("gray", "no ENSO exposure profile — coastal-"
+                              "bimodal West Africa has a weak, non-"
+                              "stationary ENSO link", as_of)
             continue
 
         # --- IOD-led OND short rains (EA minus Ethiopia) ---------------
@@ -278,20 +306,21 @@ def iod_status(con, today: dt.date) -> dict:
     return out
 
 
-def hydro_status(con, today: dt.date) -> dict:
-    """iso3 -> (status, reason, as_of). Zambia only for now, from the
-    Kariba level/drawdown monitor; other countries gray until their
-    stations are wired in."""
-    out = {c: ("gray", "no hydropower monitor for this country", None)
-           for c in ORDER}
+# V2.4 inflow-proxy thresholds (compute/hydro_signal.py). In season the
+# trailing 3-month rainfall percentile leads; out of season the last
+# completed wet season's % of normal carries the refill verdict.
+HYDRO_TRAIL = {"red": 10, "yellow": 25}
+HYDRO_REFILL = {"red": 60, "yellow": 80}
+
+
+def _kariba_light(con, today: dt.date):
+    """(status, reason, as_of) from the live Kariba level monitor."""
     s = kariba.latest_state(con)
     if not s:
-        out["ZMB"] = ("gray", "no Kariba data — run ingest/kariba.py", None)
-        return out
+        return ("gray", "no Kariba data — run ingest/kariba.py", None)
     if _age(s["date"], today) > STALE["kariba"]:
-        out["ZMB"] = ("gray", f"Kariba data stale (through {s['date']})",
-                      s["date"])
-        return out
+        return ("gray", f"Kariba data stale (through {s['date']})",
+                s["date"])
     lvl, pct, rate = s["level_m"], s["pct_full"], s["drawdown_m_wk"]
     desc = f"Kariba {lvl:.2f}m" + \
         (f", {pct:.0f}% usable" if pct is not None else "") + \
@@ -299,26 +328,146 @@ def hydro_status(con, today: dt.date) -> dict:
     if (lvl < KARIBA_RED["level_m"]
             or (pct is not None and pct < KARIBA_RED["pct_full"])
             or (rate is not None and rate >= KARIBA_RED["rate"])):
-        out["ZMB"] = ("red", f"{desc} — severe-rationing boundary in play",
-                      s["date"])
-    elif (lvl < KARIBA_YEL["level_m"]
+        return ("red", f"{desc} — severe-rationing boundary in play",
+                s["date"])
+    if (lvl < KARIBA_YEL["level_m"]
             or (pct is not None and pct < KARIBA_YEL["pct_full"])
             or (rate is not None and rate >= KARIBA_YEL["rate"])):
-        out["ZMB"] = ("yellow", f"{desc} — approaching rationing "
-                                "thresholds", s["date"])
-    else:
-        out["ZMB"] = ("green", desc, s["date"])
+        return ("yellow", f"{desc} — approaching rationing thresholds",
+                s["date"])
+    return ("green", desc, s["date"])
+
+
+def _catchment_light(r, today: dt.date):
+    """(status, reason) from one live.hydro_catchment row (V2.4).
+    Rainfall proxy only — says what fell on the catchment, not what the
+    reservoir holds."""
+    name = r["name"]
+    if _age(r["as_of"], today) > STALE["wrsi"]:
+        return ("gray", f"{name}: catchment rainfall stale "
+                        f"(through {r['as_of']})")
+    if r["in_season"]:
+        tp = r["trail_pct"]
+        if tp is None:
+            return ("gray", f"{name}: trailing-rain percentile not yet "
+                            "computable")
+        lab = (f"{name}: 3-month catchment rain p{tp:.0f}"
+               f" ({r['trail_mm']:.0f}mm), season {r['season_label']} "
+               f"{r['season_pct_normal']:.0f}% of normal"
+               if r["season_pct_normal"] is not None else
+               f"{name}: 3-month catchment rain p{tp:.0f}")
+        if tp <= HYDRO_TRAIL["red"]:
+            return ("red", f"{lab} — inflow-side drought")
+        if tp <= HYDRO_TRAIL["yellow"]:
+            return ("yellow", f"{lab} — inflow watch")
+        return ("green", lab)
+    spn = r["season_pct_normal"]
+    if spn is None:
+        return ("gray", f"{name}: no completed-season total yet")
+    lab = (f"{name}: last wet season ({r['season_label'].replace(' final', '')}) "
+           f"{spn:.0f}% of normal — dry-season carryover")
+    if spn < HYDRO_REFILL["red"]:
+        return ("red", f"{lab}; refill failure")
+    if spn < HYDRO_REFILL["yellow"]:
+        return ("yellow", f"{lab}; below-normal refill")
+    return ("green", lab)
+
+
+def hydro_status(con, today: dt.date) -> dict:
+    """iso3 -> (status, reason, as_of). Kariba keeps its live
+    level/drawdown monitor (ZMB and ZWE); V2.4 adds a rainfall-side
+    inflow proxy for every monitored catchment. A country's light is
+    the worst of its catchments (plus the Kariba level where it
+    applies); reasons name the tripping catchment."""
+    out = {c: ("gray", "no hydropower monitor for this country", None)
+           for c in ORDER}
+    try:
+        cat = con.execute(
+            "SELECT zone_key, name, countries, as_of, in_season, trail_mm, "
+            "trail_pct, season_pct_normal, season_label "
+            "FROM live.hydro_catchment").fetchall()
+        cols = ["zone_key", "name", "countries", "as_of", "in_season",
+                "trail_mm", "trail_pct", "season_pct_normal",
+                "season_label"]
+        cat = [dict(zip(cols, r)) for r in cat]
+    except Exception:  # table absent until compute/hydro_signal.py runs
+        cat = []
+    per_c: dict = {}
+    for r in cat:
+        st, reason = _catchment_light(r, today)
+        for iso in r["countries"].split(","):
+            per_c.setdefault(iso, []).append((st, reason, r["as_of"]))
+    klight = _kariba_light(con, today)
+    for iso in ("ZMB", "ZWE"):
+        per_c.setdefault(iso, []).append(klight)
+    # V3.2 reservoir levels (NASA GWM altimetry, ingest/gwm_levels.py):
+    # engineering-anchored band position — red <10%, yellow <25%
+    try:
+        res = con.execute(
+            "SELECT res_key, name, iso3, date, level_m, band_frac, "
+            "trend_8wk, drawdown_m_wk, refill_date, proj_frac "
+            "FROM live.reservoir_state").fetchall()
+    except Exception:  # table absent until gwm_levels.py runs
+        res = []
+    for rk, name, iso, d, lvl, frac, trend, rate, rdate, pfrac in res:
+        tr = "" if trend is None else f", {trend:+.1f}m/8wk"
+        lab = f"{name} {lvl:.1f}m — {frac:.0%} of operating band{tr}"
+        # V3.3 drawdown monitor (Kariba-rule mirror): does the current
+        # 8-week drawdown rate reach the floor before the refill?
+        dd = ("" if pfrac is None else
+              f"; drawdown {rate:.2f} m/wk puts it at {pfrac:.0%} of "
+              f"the band at refill onset (~{rdate})")
+        if _age(d, today) > 35:        # ~3 missed 10-day passes
+            light = ("gray", f"{name}: altimetry stale (through {d})", d)
+        elif frac < 0.10:
+            light = ("red", f"{lab} — at minimum-operating-level "
+                            "territory", d)
+        elif pfrac is not None and pfrac <= 0:
+            light = ("red", f"{lab}{dd} — ON PACE TO HIT MINIMUM "
+                            "OPERATING LEVEL BEFORE REFILL", d)
+        elif frac < 0.25 or (pfrac is not None and pfrac < 0.10):
+            light = ("yellow", f"{lab}{dd} — low on the band or "
+                               "drawdown pace threatens the floor", d)
+        else:
+            light = ("green", lab + dd, d)
+        per_c.setdefault(iso, []).append(light)
+    # GERD has no public level feed (SCOPING-HYDRO-LEVELS): say so
+    # rather than letting the rainfall proxy stand in silently
+    per_c.setdefault("ETH", []).append(
+        ("gray", "GERD storage: no public level feed — Blue Nile "
+                 "catchment rainfall proxy only", None))
+    for iso, lights in per_c.items():
+        if iso not in out:
+            continue
+        worst = max(lights, key=lambda x: RANK.get(x[0], -1))
+        others = [x for x in lights if x is not worst]
+        tail = (f" (+{len(others)} other monitor(s) "
+                f"{'/'.join(sorted({o[0] for o in others}))})"
+                if others else "")
+        out[iso] = (worst[0], worst[1] + tail, worst[2])
     return out
 
 
 RANK = {"gray": -1, "green": 0, "yellow": 1, "red": 2}
 
 
-def drought_zones(con, today: dt.date) -> pd.DataFrame:
+def drought_zones(con, today: dt.date, sector: str = "staple"
+                  ) -> pd.DataFrame:
     """Per-zone drought lights: one row per crop zone with status, the
-    tripping reason, and the raw readings (in-season WRSI, SPI-3, SM)."""
+    tripping reason, and the raw readings (in-season WRSI, SPI-3, SM).
+    V2.3: sector selects staple zones (default) or export belts — the
+    same water-stress thresholds, routed to different board columns."""
+    have_sector = "sector" in [r[1] for r in con.execute(
+        "SELECT * FROM pragma_table_info('zones')")]
     zones = pd.read_sql_query(
-        "SELECT zone_key, iso3, name, seasons FROM zones", con)
+        "SELECT zone_key, iso3, name, seasons FROM zones"
+        + (" WHERE coalesce(sector,'staple')=?" if have_sector else ""),
+        con, params=(sector,) if have_sector else ())
+    if not have_sector and sector == "export":
+        return pd.DataFrame(columns=["zone_key", "country", "name",
+                                     "status", "reason", "wrsi",
+                                     "wrsi_in_season", "spi3", "sm",
+                                     "season", "as_of", "_sev"])
     latest = pd.read_sql_query(
         "SELECT zone_key, dataset, granule_start, value FROM observations "
         "WHERE dataset IN ('lwrsi_africa_dekad_pctm',"
@@ -340,8 +489,19 @@ def drought_zones(con, today: dt.date) -> pd.DataFrame:
         sp = spi[spi.zone_key == z.zone_key]
         s3 = sp.spi3.iloc[0] if not sp.empty else None
         s3_d = sp.granule_start.iloc[0] if not sp.empty else None
+        wr_win = None if wr_d is None else \
+            window_of(z.seasons, dt.date.fromisoformat(wr_d).month)
+        wr_season = wr_win[0] if wr_win else None
+        # a reading in the first month of a window is not yet a season
+        # signal — early dekads read as extremes (RWA Sep 2026)
+        if wr_win and wr_d:
+            rd = dt.date.fromisoformat(wr_d)
+            start = dt.date(rd.year - (1 if wr_win[1] > rd.month else 0),
+                            wr_win[1], 1)
+            if (rd - start).days < 30:
+                wr_season = None
         wr_ok = _age(wr_d, today) <= STALE["wrsi"] and wr is not None \
-            and in_season(z.seasons, dt.date.fromisoformat(wr_d).month)
+            and wr_season is not None
         sm_ok = sm is not None and _age(sm_d, today) <= STALE["sm"]
         s3_ok = s3 is not None and _age(s3_d, today) <= STALE["spi"]
         status, why = "green", "no stress"
@@ -364,6 +524,7 @@ def drought_zones(con, today: dt.date) -> pd.DataFrame:
             "wrsi": wr if wr is not None else None,
             "wrsi_in_season": int(bool(wr_ok)),
             "spi3": s3, "sm": sm,
+            "season": wr_season if wr_ok else None,
             "as_of": wr_d if wr_ok else (s3_d or sm_d or wr_d),
             # severity for the country rollup: worse status first, then
             # lower in-season WRSI, then lower SPI-3
@@ -374,13 +535,14 @@ def drought_zones(con, today: dt.date) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def drought_status(zr: pd.DataFrame) -> dict:
+def drought_status(zr: pd.DataFrame,
+                   empty_reason: str = "no crop zones ingested") -> dict:
     """iso3 -> (status, reason, as_of): worst zone in drought_zones wins."""
     out = {}
     for c in ORDER:
         zs = zr[zr.country == c]
         if zs.empty:
-            out[c] = ("gray", "no crop zones ingested", None)
+            out[c] = ("gray", empty_reason, None)
             continue
         live = zs[zs.status != "gray"]
         if live.empty:
@@ -451,17 +613,26 @@ def main() -> int:
     con = db.connect()
     con.executescript(SCHEMA)
     zr = drought_zones(con, today)
+    zx = drought_zones(con, today, sector="export")
     factors = {"enso": enso_status(con, today),
                "iod": iod_status(con, today),
                "drought": drought_status(zr),
+               "export": drought_status(
+                   zx, empty_reason="no export-crop belts for this "
+                                    "country"),
                "flood": flood_status(con, today),
                "hydro": hydro_status(con, today)}
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    if "season" not in [r[1] for r in con.execute(
+            "SELECT * FROM pragma_table_info('zone_risk', 'live')")]:
+        con.execute("ALTER TABLE live.zone_risk ADD COLUMN season TEXT")
     con.executemany(
-        "INSERT OR REPLACE INTO zone_risk VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-        [(r.zone_key, "drought", r.country, r["name"], r.status, r.reason,
-          r.wrsi, r.wrsi_in_season, r.spi3, r.sm, r.as_of, now)
-         for _, r in zr.iterrows()])
+        "INSERT OR REPLACE INTO zone_risk VALUES "
+        "(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [(r.zone_key, fac, r.country, r["name"], r.status, r.reason,
+          r.wrsi, r.wrsi_in_season, r.spi3, r.sm, r.as_of, now, r.season)
+         for fac, frame in (("drought", zr), ("export", zx))
+         for _, r in frame.iterrows()])
     prev = {(r[0], r[1]): r[2] for r in con.execute(
         "SELECT country, factor, status FROM country_risk")}
     for fac, states in factors.items():

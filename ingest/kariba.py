@@ -106,8 +106,12 @@ def fetch_lake_levels(con, today=None) -> int:
             continue
         # "23-Jun" belongs to the current year unless that lands in the
         # future (a December row read in January) — then roll back a year.
+        # ZRA drifts between month styles ("Sep", "Sept", "June") —
+        # normalize to the 3-letter form strptime accepts (Sep 2026 break).
         try:
-            day = dt.datetime.strptime(f"{cells[0]}-{today.year}", "%d-%b-%Y")
+            dpart, mpart = cells[0].split("-", 1)
+            day = dt.datetime.strptime(
+                f"{dpart}-{mpart[:3]}-{today.year}", "%d-%b-%Y")
         except ValueError:
             continue
         if day > today + dt.timedelta(days=3):
@@ -152,8 +156,16 @@ def _parse_month_header(label: str):
     """ZRA hand-edits these headers and typos are routine ('Aiugust 2026'),
     so match the month fuzzily and regex the year."""
     year = re.search(r"\b(19|20)\d{2}\b", label)
+    if year:
+        yr = int(year.group(0))
+    else:
+        # Sep 2026 drift: two-digit years ('Sep-24')
+        y2 = re.search(r"[-'\s](\d{2})\b", label)
+        if not y2:
+            return None
+        yr = 2000 + int(y2.group(1))
     word = re.search(r"[A-Za-z]+", label)
-    if not year or not word:
+    if not word:
         return None
     name = word.group(0).lower()
     match = [m for m in _MONTHS if m.startswith(name[:3]) and len(name) >= 3]
@@ -161,48 +173,77 @@ def _parse_month_header(label: str):
         match = get_close_matches(name, _MONTHS, n=1, cutoff=0.6)
     if not match:
         return None
-    return dt.date(int(year.group(0)), _MONTHS.index(match[0]) + 1, 1)
+    return dt.date(yr, _MONTHS.index(match[0]) + 1, 1)
 
 
 def fetch_reservoir_data(con) -> int:
-    """Parse the reservoir table (current month x 3 years, colspan groups)."""
+    """Parse the reservoir table (current month x 3 years).
+
+    Layout drifts (Sep 2026): month headers may span their columns via
+    colspan attributes OR via empty padding cells, and the sub-header
+    may occupy one or several rows ('Turbine' / 'Discharge (m3/s)').
+    Parse column-wise: forward-fill the month across columns, join the
+    sub-header rows per column, map to fields fuzzily."""
     soup = BeautifulSoup(_get(RESERVOIR_URL).text, "html.parser")
     table = soup.find("table")
     if table is None:
         raise ValueError("ZRA reservoir-data page: no table found")
     trs = table.find_all("tr")
-    groups = []
-    for cell in trs[0].find_all(["td", "th"])[1:]:
-        label = cell.get_text(strip=True)
-        month_start = _parse_month_header(label)
-        if month_start is None:
-            raise ValueError(f"unparseable month header {label!r}")
-        groups.append((month_start, int(cell.get("colspan", 1))))
-    sub = [c.get_text(strip=True).lower() for c in trs[1].find_all(["td", "th"])]
-    if sub and sub[0] == "day":
-        sub = sub[1:]
-    col_names, i = [], 0
-    for month_start, span in groups:
-        col_names.append((month_start, sub[i:i + span]))
-        i += span
+    # expand row 0 honoring colspan, then forward-fill months per column
+    row0 = []
+    for cell in trs[0].find_all(["td", "th"]):
+        row0.extend([cell.get_text(strip=True)]
+                    + [""] * (int(cell.get("colspan", 1)) - 1))
+    header_rows, data_start = [], None
+    for i, tr in enumerate(trs[1:], start=1):
+        cells = [c.get_text(strip=True) for c in tr.find_all(["td", "th"])]
+        if cells and cells[0].isdigit():
+            data_start = i
+            break
+        header_rows.append(cells)
+    if data_start is None:
+        raise ValueError("ZRA reservoir-data page: no data rows")
+    ncols = max([len(row0)] + [len(r) for r in header_rows])
+    # ZRA drifts on whether sub-header rows carry a leading cell under
+    # 'Day' (dropped Sep 26 2026, shifting every field one column left
+    # and corrupting turbine<-pct_full). Right-align: pad short header
+    # rows on the LEFT so their last column matches the data grid.
+    header_rows = [[""] * (ncols - len(r)) + r if len(r) < ncols else r
+                   for r in header_rows]
+    col_month, cur = [None] * ncols, None
+    for j in range(ncols):
+        label = row0[j] if j < len(row0) else ""
+        if label and label.lower() != "day":
+            m = _parse_month_header(label)
+            if m is not None:
+                cur = m
+        col_month[j] = cur
+    col_field = [None] * ncols
+    for j in range(1, ncols):
+        joined = " ".join(r[j] for r in header_rows if j < len(r)).lower()
+        col_field[j] = _field_for(joined)
     recs = {}
-    for tr in trs[2:]:
+    for tr in trs[data_start:]:
         cells = [c.get_text(strip=True) for c in tr.find_all(["td", "th"])]
         if not cells or not cells[0].isdigit():
             continue
-        day_no, j = int(cells[0]), 1
-        for month_start, names in col_names:
-            for name in names:
-                val = _num(cells[j]) if j < len(cells) else None
-                j += 1
-                field = _field_for(name)
-                if val is None or field is None:
-                    continue
-                try:
-                    date = month_start.replace(day=day_no).isoformat()
-                except ValueError:
-                    continue
-                recs.setdefault(date, {})[field] = _bound(field, val)
+        day_no = int(cells[0])
+        for j in range(1, min(ncols, len(cells))):
+            field, month_start = col_field[j], col_month[j]
+            if field is None or month_start is None:
+                continue
+            # misalignment tripwire: a percent-suffixed cell can only
+            # be pct_full — never let it land in another field
+            if cells[j].endswith("%") and field != "pct_full":
+                continue
+            val = _num(cells[j])
+            if val is None:
+                continue
+            try:
+                date = month_start.replace(day=day_no).isoformat()
+            except ValueError:
+                continue
+            recs.setdefault(date, {})[field] = _bound(field, val)
     if not recs:
         raise ValueError("ZRA reservoir-data page: table parsed to zero rows")
     for date, f in recs.items():

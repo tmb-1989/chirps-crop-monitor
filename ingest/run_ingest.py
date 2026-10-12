@@ -12,7 +12,7 @@ import sys
 import time
 
 from config import (ZONES, DATASETS, CROPZONE_VECTOR, VECTOR_OVERRIDES,
-                    FIRST_SEASON)
+                    FIRST_SEASON, EXPORT_CROP)
 import db
 import ewx_api
 
@@ -50,6 +50,18 @@ def main() -> int:
                   file=sys.stderr)
         db.upsert_zone(con, zone_key, iso3, name, lat, lon, info,
                        ",".join(f"{n}:{a}-{b}" for n, a, b in seasons))
+        # V2.3: export zones carry their true crop (the WFS mask crop is
+        # a staple label) and sector='export' so drought/CPI skip them
+        if "sector" not in [r[1] for r in con.execute(
+                "SELECT * FROM pragma_table_info('zones')")]:
+            con.execute("ALTER TABLE zones ADD COLUMN sector TEXT")
+        if zone_key in EXPORT_CROP:
+            con.execute("UPDATE zones SET sector='export', crop=? "
+                        "WHERE zone_key=?",
+                        (EXPORT_CROP[zone_key], zone_key))
+        else:
+            con.execute("UPDATE zones SET sector='staple' "
+                        "WHERE zone_key=? AND sector IS NULL", (zone_key,))
         con.commit()
 
         vector = VECTOR_OVERRIDES.get(zone_key, CROPZONE_VECTOR)
