@@ -28,6 +28,9 @@ esac
 # V2.4 hydropower inflow proxy (catchment rainfall) — feeds the hydro lights
 ./venv/bin/python compute/hydro_signal.py || echo "WARN: hydro signal failed, board uses stale catchment state"
 ./venv/bin/python compute/country_risk.py
+# V3.4 board-change emails: flood/hydro yellow->red immediately (at this
+# run's cadence), full digest Monday mornings — non-fatal
+./venv/bin/python compute/status_alerts.py || echo "WARN: status alerts failed"
 # escalate silent feed rot (a stale feed grays cells but told no one
 # until Sep 2026) — one email per episode, non-fatal
 ./venv/bin/python compute/staleness_watch.py || echo "WARN: staleness watch failed"
