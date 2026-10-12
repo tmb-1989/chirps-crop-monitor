@@ -57,11 +57,16 @@ ANTE_WINDOW = 18  # pentads (~3 months)
 # consec: consecutive hot pentads for a watch; floor: absolute mm floor;
 # region: (min armed, min alerting) basins for a country regional alert.
 # Calibration (episodes 1999-2026): precision/recall/major-recall
-#   KEN 88/73/100  ETH 56/64/67  TZA 40/88/100  RWA 60/50/67  UGA 30/43/75
+#   KEN 88/73/100  ETH 56/64/67  TZA 36/62/75  RWA 60/50/67  UGA 30/43/75
+#   (TZA recalibrated 12 Oct 2026 after the bas_lindi polygon correction
+#   and flood_state rebuild, AUDIT-FLOOD-BASINS.md v2 / stage-2
+#   reconciliation: old 40/88/100 was fitted on bas_lindi's wrong
+#   ~6,039 km2 polygon; F1 winner changed to arm=80/hot=90/consec=2/
+#   floor=25, still >=75% major-recall so no override needed.)
 PARAMS = {
     "KEN": dict(arm=80, hot=90, consec=2, floor=25, region=(2, 1)),
     "ETH": dict(arm=80, hot=95, consec=1, floor=25, region=(2, 1)),
-    "TZA": dict(arm=90, hot=90, consec=1, floor=5, region=(2, 1)),
+    "TZA": dict(arm=80, hot=90, consec=2, floor=25, region=(2, 1)),
     "RWA": dict(arm=90, hot=90, consec=2, floor=5, region=(2, 1)),
     "UGA": dict(arm=90, hot=95, consec=1, floor=5, region=(2, 1)),
     # --- P6 calibrated 5 Oct 2026 (flood_calibrate over the full
