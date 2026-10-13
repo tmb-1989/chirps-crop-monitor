@@ -63,6 +63,13 @@ def dahiti_api_key() -> str | None:
     """DAHITI key from env var or a `.env` line `DAHITI_API_KEY=...` at
     the repo root (elnino-hydro-dashboard convention, ported verbatim)."""
     key = os.environ.get("DAHITI_API_KEY")
+    if not key:
+        # mini deployment: Keychain item per the project contract
+        try:
+            from secrets_helper import secret
+            key = secret("CHIRPS_DAHITI_API_KEY")
+        except Exception:
+            key = None
     if key:
         return key.strip()
     env_file = ROOT / ".env"

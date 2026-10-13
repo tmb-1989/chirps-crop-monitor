@@ -24,9 +24,16 @@ import db  # noqa: E402
 
 
 def load_levels(con, station_key: str) -> pd.DataFrame:
-    df = pd.read_sql_query(
-        "SELECT date, level_m, error_m FROM hydro_levels WHERE "
-        "station_key=? ORDER BY date", con, params=(station_key,))
+    """Empty frame (never an exception) when the table is absent — the
+    deploy-facing app.sqlite may predate the hydro ingest on a given
+    machine, and a missing table must render as 'no data yet', not a 500
+    (Streamlit Cloud outage of 2026-10-13)."""
+    try:
+        df = pd.read_sql_query(
+            "SELECT date, level_m, error_m FROM hydro_levels WHERE "
+            "station_key=? ORDER BY date", con, params=(station_key,))
+    except pd.errors.DatabaseError:
+        return pd.DataFrame(columns=["date", "level_m", "error_m"])
     df["date"] = pd.to_datetime(df["date"])
     return df
 

@@ -1041,9 +1041,12 @@ if view == "Mozambique hydro":
     inflow_cols = st.columns(2)
 
     with inflow_cols[0]:
-        kdf = pd.read_sql_query(
-            "SELECT date, turbine_m3s FROM kariba_flows "
-            "WHERE turbine_m3s IS NOT NULL ORDER BY date", con)
+        try:
+            kdf = pd.read_sql_query(
+                "SELECT date, turbine_m3s FROM kariba_flows "
+                "WHERE turbine_m3s IS NOT NULL ORDER BY date", con)
+        except pd.errors.DatabaseError:   # table absent on this copy
+            kdf = pd.DataFrame(columns=["date", "turbine_m3s"])
         if kdf.empty:
             st.warning("Kariba discharge: no data — run "
                        "ingest/zra_kariba.py (--seed first).")
