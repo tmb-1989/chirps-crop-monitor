@@ -6,6 +6,12 @@
       "runtimeExecutable": "./venv/bin/streamlit",
       "runtimeArgs": ["run", "app/streamlit_app.py", "--server.headless", "true", "--server.port", "8501"],
       "port": 8501
+    },
+    {
+      "name": "mockups",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8899", "--bind", "127.0.0.1", "--directory", "/private/tmp/claude-501/-Users-thaddeusbest-Claude-chirps-crop-monitor/b0edfdbf-f709-4d8f-b79c-b6cd726bff58/scratchpad"],
+      "port": 8899
     }
   ]
 }

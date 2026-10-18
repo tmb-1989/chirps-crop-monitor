@@ -71,4 +71,6 @@ case $(date +%-d) in
 esac
 git diff --cached --quiet || git commit -m "data update $(date +%F)"
 git push origin main
+git push /Users/Shared/git/chirps-crop-monitor.git main || echo "WARN: mirror push failed"
+curl -fsS -m 10 --retry 5 https://hc-ping.com/cfb2a4de-6594-4fd3-b550-5d5e24a7efc7 > /dev/null || true
 echo "update complete: $(date)"
