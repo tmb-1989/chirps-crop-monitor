@@ -563,7 +563,9 @@ NTFY_TOPIC_FILE = pathlib.Path(__file__).resolve().parent.parent / \
 # Deterministic sender + fixed recipient allowlist; no secrets in files.
 SMTP_HOST, SMTP_PORT = "smtp.migadu.com", 465
 SMTP_SENDER = "minibot@remote-brain.com"
-ALERT_RECIPIENTS = ["thaddeus.best@gmail.com"]
+# all recipients are BCC'd (12 Oct 2026): the To header shows only the
+# sender, so neither address sees the other
+ALERT_RECIPIENTS = ["thaddeus.best@gmail.com", "thaddeus.best@metlife.com"]
 
 
 def _email(subject: str, body: str) -> None:
@@ -586,12 +588,15 @@ def _email(subject: str, body: str) -> None:
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = SMTP_SENDER
-        msg["To"] = ", ".join(ALERT_RECIPIENTS)
+        # BCC delivery: recipients go on the SMTP envelope only; the
+        # To header shows the sender itself
+        msg["To"] = SMTP_SENDER
         msg.set_content(body)
         with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=60) as s:
             s.login(SMTP_SENDER, password)
-            s.send_message(msg)
-        print(f"alert email sent to {', '.join(ALERT_RECIPIENTS)}")
+            s.send_message(msg, from_addr=SMTP_SENDER,
+                           to_addrs=ALERT_RECIPIENTS)
+        print(f"alert email sent (bcc) to {', '.join(ALERT_RECIPIENTS)}")
     except Exception as e:  # noqa: BLE001
         print(f"alert email failed (non-fatal): {e}", file=sys.stderr)
 
