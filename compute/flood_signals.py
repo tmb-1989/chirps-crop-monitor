@@ -568,20 +568,24 @@ SMTP_SENDER = "minibot@remote-brain.com"
 ALERT_RECIPIENTS = ["thaddeus.best@gmail.com", "thaddeus.best@metlife.com"]
 
 
-def _email(subject: str, body: str) -> None:
-    """Send an alert email as the Migadu sender. Opt-in by presence of
-    the MIGADU_SMTP Keychain item (or MIGADU_SMTP_PASSWORD env for dev);
-    missing item = skip, any failure non-fatal — alerting must never
-    kill the run."""
+def _email(subject: str, body: str) -> bool:
+    """Send an alert email as the Migadu sender; returns True only on a
+    completed SMTP handoff so callers can retry later. Opt-in by
+    presence of the MIGADU_SMTP Keychain item (or MIGADU_SMTP_PASSWORD
+    env for dev); any failure non-fatal — alerting must never kill the
+    run. NB a LOCKED keychain (07:30 cron on a locked Mac, 19 Oct 2026)
+    fails exactly like a missing item — the stderr is printed so the
+    cron log tells them apart."""
     from secrets_helper import secret  # ingest/secrets_helper.py
     try:
         password = secret("MIGADU_SMTP", account=SMTP_SENDER,
                           env="MIGADU_SMTP_PASSWORD")
-    except Exception:  # noqa: BLE001 — no Keychain item: alerting is off
-        print("alert email skipped: no MIGADU_SMTP Keychain item "
-              f"for {SMTP_SENDER} (and no MIGADU_SMTP_PASSWORD env)",
-              file=sys.stderr)
-        return
+    except Exception as e:  # noqa: BLE001 — missing OR unreadable item
+        detail = getattr(e, "stderr", "") or str(e)
+        print("alert email skipped: MIGADU_SMTP unreadable for "
+              f"{SMTP_SENDER} (missing item, or keychain locked): "
+              f"{detail.strip()}", file=sys.stderr)
+        return False
     try:
         import smtplib
         from email.message import EmailMessage
@@ -597,6 +601,7 @@ def _email(subject: str, body: str) -> None:
             s.send_message(msg, from_addr=SMTP_SENDER,
                            to_addrs=ALERT_RECIPIENTS)
         print(f"alert email sent (bcc) to {', '.join(ALERT_RECIPIENTS)}")
+        return True
     except Exception as e:  # noqa: BLE001
         print(f"alert email failed (non-fatal): {e}", file=sys.stderr)
 

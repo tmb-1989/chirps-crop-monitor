@@ -84,10 +84,16 @@ def immediate(con, now: dt.datetime, dry: bool) -> None:
 def weekly(con, now: dt.datetime, dry: bool) -> None:
     """Monday digest: all changes of the last 7 days + current reds."""
     today = now.date()
-    if today.weekday() != 0:          # Monday only
+    last = _get(con, "last_digest")
+    last_d = dt.date.fromisoformat(last) if last else None
+    # due on Mondays — but if a Monday send failed (locked keychain at
+    # the 07:30 cron, 19 Oct 2026), retry on the following days until
+    # one lands rather than staying silent for the whole week
+    overdue = last_d is not None and (today - last_d).days > 7
+    if today.weekday() != 0 and not overdue:
         print("weekly: not Monday — skipped")
         return
-    if _get(con, "last_digest") == today.isoformat():
+    if last_d == today:
         print("weekly: already sent today")
         return
     since = (now - dt.timedelta(days=7)).isoformat(timespec="seconds")
@@ -117,8 +123,9 @@ def weekly(con, now: dt.datetime, dry: bool) -> None:
     print(f"weekly: digest with {len(rows)} changes, {len(reds)} reds")
     if dry:
         print(subject + "\n" + body)
-    else:
-        _email(subject, body)
+    elif _email(subject, body):
+        # only a completed send marks the week done — a skipped/failed
+        # email retries at the next daily run
         _set(con, "last_digest", today.isoformat())
 
 
