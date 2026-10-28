@@ -514,14 +514,14 @@ if view == "Overview":
             for xs, ys in _rings(f):
                 fx.add_scatter(x=xs, y=ys, mode="lines", fill="toself",
                                fillcolor=fc, opacity=0.9, name="",
-                               line=dict(color="#5f4379", width=1.2),
+                               line=dict(color="white", width=0.5),
                                hovertemplate=hover, showlegend=False)
         _africa_layout(fx, _b, f"Export belts by root-zone soil moisture — "
                                f"{_n_dry} of {_n_belt} below the 85% watch "
                                "line (hover for detail)")
         st.plotly_chart(fx, use_container_width=True)
         st.caption("Perennial export belts (coffee, tea, cocoa, tobacco, "
-                   "cashew, vanilla, cotton; purple edges, clipped to their "
+                   "cashew, vanilla, cotton; clipped to their "
                    "GAEZ crop footprint) shaded by FLDAS root-zone soil "
                    "moisture as % of the long-run mean — the slow-moving "
                    "water buffer a tree crop actually draws on: green ≥95, "
