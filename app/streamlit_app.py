@@ -168,7 +168,21 @@ def _rings(feature):
 
 
 def _africa_base(fig, outlines, label=True):
-    """Draw every monitored country's outline; returns the overall bbox."""
+    """Draw the continent, then every monitored country's outline;
+    returns the bbox of the monitored countries."""
+    _cont = _dbdir.parent / "data/zones/africa_outline.geojson"
+    cont_bounds = None
+    if _cont.exists():
+        for f in _json.loads(_cont.read_text())["features"]:
+            for xs, ys in _rings(f):
+                cont_bounds = [min(xs), min(ys), max(xs), max(ys)] \
+                    if cont_bounds is None else \
+                    [min(cont_bounds[0], min(xs)), min(cont_bounds[1], min(ys)),
+                     max(cont_bounds[2], max(xs)), max(cont_bounds[3], max(ys))]
+                fig.add_scatter(x=xs, y=ys, mode="lines",
+                                line=dict(color="#c9c9c9", width=0.8),
+                                fill="toself", fillcolor="#fbfaf7",
+                                hoverinfo="skip", showlegend=False)
     bounds = None
     for f in outlines["features"]:
         iso = f["properties"]["iso3"]
@@ -189,7 +203,9 @@ def _africa_base(fig, outlines, label=True):
                                text=NAMES_CR.get(iso, iso), showarrow=False,
                                font=dict(size=10, color="#6b6b6b"),
                                opacity=0.85)
-    return bounds
+    # frame the whole continent when its outline is available (the
+    # monitored countries sit in its southern and eastern two-thirds)
+    return cont_bounds or bounds
 
 
 def _africa_layout(fig, bounds, title, height=760):
