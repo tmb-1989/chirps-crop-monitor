@@ -105,8 +105,7 @@ tracking as bad as the worst of those events.
 """)
 
 today = dt.date.today()
-view = st.sidebar.radio("View", ["Overview", "Country", "CPI impulse",
-                                 "DRC hydro", "Mozambique hydro"])
+view = st.sidebar.radio("View", ["Overview", "Country", "CPI impulse"])
 
 # ======================== COUNTRY RISK ====================================
 NAMES_CR = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
@@ -142,6 +141,20 @@ def _status_fill(status):
             "yellow": ("#e8c84d", "watch (SPI-3 ≤ −1 or soil moisture < 85%)"),
             "red": ("#d95f4b", "stress (SPI-3 ≤ −1.5 and soil moisture < 85%)"),
             }.get(status, ("#d8d8d8", "no data"))
+
+
+def _sm_band(sm):
+    """Mirror the root-zone soil-moisture chart bands (% of long-run
+    mean): ≥95 normal, 85–95 watch, 75–85 issue, <75 severe."""
+    if sm is None or pd.isna(sm):
+        return "#d8d8d8", "no data"
+    if sm >= 95:
+        return "#79c47e", "normal (≥95% of mean)"
+    if sm >= 85:
+        return "#e8c84d", "watch (85–95%)"
+    if sm >= 75:
+        return "#ec9b3b", "issue level (75–85%)"
+    return "#d95f4b", "severe deficit (<75%)"
 
 
 def _flood_color(r):
@@ -419,8 +432,12 @@ if view == "Overview":
         if _bgj_all_path.exists() else {"features": []}
     _sector_of = zones.set_index("zone_key")["sector"].to_dict() \
         if "sector" in zones.columns else {}
-    tab_w, tab_f = st.tabs(["Crop water stress (WRSI) — all countries",
-                            "Flood watch — all basins"])
+    _crop_of = zones.set_index("zone_key")["crop"].to_dict() \
+        if "crop" in zones.columns else {}
+    tab_w, tab_x, tab_f = st.tabs([
+        "Crop water stress (WRSI) — staple zones",
+        "Export belts — root-zone soil moisture",
+        "Flood watch — all basins"])
     with tab_w:
         _zr = load("SELECT zone_key, wrsi, wrsi_in_season, spi3, sm, season "
                    "FROM zone_risk WHERE factor='drought'") \
@@ -465,8 +482,52 @@ if view == "Overview":
                    "reads ~100 off-season and is not a signal) or no data. "
                    "Export belts (coffee, tea, cocoa, tobacco…) are "
                    "perennials with no cereal crop cycle, so they carry no "
-                   "WRSI and are not drawn here — see the export column on "
-                   "the board and the Country tab.")
+                   "WRSI — they have their own soil-moisture map (next tab).")
+    with tab_x:
+        _xr = load("SELECT zone_key, status, sm, spi3, as_of FROM zone_risk "
+                   "WHERE factor='export'").drop_duplicates("zone_key") \
+            .set_index("zone_key")
+        fx = go.Figure()
+        _b = _africa_base(fx, _outl)
+        _n_belt, _n_dry = 0, 0
+        for f in _zgj_all["features"]:
+            p = f["properties"]
+            zk = p["zone_key"]
+            if _sector_of.get(zk) != "export":
+                continue
+            r = _xr.loc[zk] if zk in _xr.index else None
+            smv = None if r is None else r.sm
+            fc, blab = _sm_band(smv)
+            _n_belt += 1
+            _n_dry += int(smv is not None and not pd.isna(smv) and smv < 85)
+            hover = (f"<b>{zone_label.get(zk, zk)}</b><br>"
+                     f"{NAMES_CR.get(p.get('iso3'), p.get('iso3'))} · "
+                     f"{_crop_of.get(zk, '?')}<br>"
+                     f"Root-zone soil moisture: "
+                     f"{'—' if smv is None or pd.isna(smv) else f'{smv:.0f}%'}"
+                     f" ({blab})<br>"
+                     + ("" if r is None or pd.isna(r.spi3)
+                        else f"SPI-3: {r.spi3:.1f}<br>")
+                     + ("" if r is None or not r.as_of
+                        else f"as of {r.as_of}")
+                     + "<extra></extra>")
+            for xs, ys in _rings(f):
+                fx.add_scatter(x=xs, y=ys, mode="lines", fill="toself",
+                               fillcolor=fc, opacity=0.9, name="",
+                               line=dict(color="#5f4379", width=1.2),
+                               hovertemplate=hover, showlegend=False)
+        _africa_layout(fx, _b, f"Export belts by root-zone soil moisture — "
+                               f"{_n_dry} of {_n_belt} below the 85% watch "
+                               "line (hover for detail)")
+        st.plotly_chart(fx, use_container_width=True)
+        st.caption("Perennial export belts (coffee, tea, cocoa, tobacco, "
+                   "cashew, vanilla, cotton; purple edges, clipped to their "
+                   "GAEZ crop footprint) shaded by FLDAS root-zone soil "
+                   "moisture as % of the long-run mean — the slow-moving "
+                   "water buffer a tree crop actually draws on: green ≥95, "
+                   "gold 85–95 watch, orange 75–85 issue, red <75. Monthly, "
+                   "~6-week lag; SPI-3 on hover. WRSI is not applied to "
+                   "these crops.")
     with tab_f:
         _bs = load("SELECT zone_key, tier, pct_normal, ante_pct, "
                    "MAX(granule_start) AS g FROM flood_state "
@@ -991,7 +1052,10 @@ def _flood_section(_ciso):
     return
 
 # ======================== DRC HYDRO ========================================
-if view == "DRC hydro":
+def _drc_hydro_view():
+    """Katanga cascade + Inga etiage panels; rendered on the Zambia
+    country page (the DRC copper belt's power is Zambian-grid-linked
+    and DRC has no crop zones of its own here)."""
     import sys as _sys
     _sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent
                             / "compute"))
@@ -1170,10 +1234,12 @@ if view == "DRC hydro":
         "curtailment episodes exists to check candidate thresholds "
         "against. Busanga (240MW, Sicomines) has no public altimetry or "
         "output data and is not represented at all.")
-    st.stop()
+    return
 
 # ======================== MOZAMBIQUE HYDRO =================================
-if view == "Mozambique hydro":
+def _moz_hydro_view():
+    """Cahora Bassa + inflows panels; rendered on the Mozambique
+    country page."""
     import sys as _sys
     _sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent
                             / "compute"))
@@ -1400,7 +1466,7 @@ if view == "Mozambique hydro":
         "discharge is a same scrape the sister elnino-hydro-dashboard "
         "project already runs — duplicated here so this monitor stays "
         "self-contained on the mini, per the build's contract amendment.")
-    st.stop()
+    return
 
 
 # ======================== HYDRO SECTION (Country tab) =====
@@ -2345,4 +2411,14 @@ st.caption("Sources: CHC UCSB CHIRPS via USGS FEWS NET GeoEngine; "
 # flood + hydro components for the selected country
 _flood_section(_ciso)
 _hydro_section(_ciso)
+# the former standalone hydro views now live with their country
+if _ciso == "MOZ":
+    st.divider()
+    _moz_hydro_view()
+elif _ciso == "ZMB":
+    st.divider()
+    st.caption("DRC hydro is shown here with Zambia: the Katanga copper "
+               "belt draws on the Zambian grid and DRC has no crop zones "
+               "in this monitor.")
+    _drc_hydro_view()
 

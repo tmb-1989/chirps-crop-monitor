@@ -69,11 +69,19 @@ the index models an annual cereal's growth-stage water requirement and
 has no meaning for perennials — so their light is SPI-3 + soil moisture
 only, and they are omitted from the Overview's WRSI map.
 
-The Overview also carries two Africa-wide maps (shared helpers at the
-top of `app/streamlit_app.py`): every staple zone shaded by its latest
-in-season WRSI, and every flood-watch basin shaded by its current tier,
-both drawn inside the monitored countries' outlines
-(`data/zones/country_outlines.geojson`).
+The Overview also carries three Africa-wide maps (shared helpers at the
+top of `app/streamlit_app.py`), drawn over a dissolved Natural Earth
+continent outline (`data/zones/africa_outline.geojson`) and the
+monitored countries' outlines (`data/zones/country_outlines.geojson`):
+every staple zone shaded by its latest in-season WRSI; every export belt
+shaded by FLDAS root-zone soil moisture (% of mean, the soil-moisture
+chart bands — the water buffer a tree crop draws on); and every
+flood-watch basin shaded by its current tier.
+
+The former standalone "DRC hydro" and "Mozambique hydro" views are
+rendered at the foot of the Country tab — Mozambique's under Mozambique,
+the DRC Katanga/Inga panels under Zambia (the DRC copper belt draws on
+the Zambian grid and DRC has no crop zones in this monitor).
 
 ## Flood-watch layer
 
