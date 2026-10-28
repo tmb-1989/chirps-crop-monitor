@@ -15,6 +15,8 @@ import streamlit as st
 
 # full archive locally; deployed clones carry the trimmed app.sqlite
 # (observations >= 2010 — see ingest/app_db.py; GitHub's 100MB limit)
+import json as _json  # noqa: E402  (Overview maps read the zone GeoJSON)
+
 _dbdir = pathlib.Path(__file__).resolve().parent.parent / "db"
 DB = _dbdir / "monitor.sqlite"
 if not DB.exists():
@@ -116,6 +118,90 @@ NAMES_CR = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
 DOT = {"green": "🟢", "yellow": "🟡", "red": "🔴", "gray": "⚪"}
 FILL = {"green": "#e6f4e6", "yellow": "#fdf3d7", "red": "#fbe3e3",
         "gray": "#f0f0f0"}
+COMPOSITE_KEYS = {"ken_grain_basket", "zmb_maize_belt", "zaf_maize_triangle"}
+
+
+# ---- shared map colouring (Overview Africa maps + Country tab map) --------
+def _wrsi_band(w, ins):
+    """Mirror the WRSI chart bands (gold 80-94, orange 60-79, red <60)."""
+    if w is None or pd.isna(w) or not ins:
+        return "#d8d8d8", "off-season / no data"
+    if w >= 95:
+        return "#79c47e", "normal (≥95)"
+    if w >= 80:
+        return "#e8c84d", "mild stress (80–94)"
+    if w >= 60:
+        return "#ec9b3b", "stressed (60–79)"
+    return "#d95f4b", "crop-failure risk (<60)"
+
+
+def _status_fill(status):
+    """Export belts have no WRSI: colour by the SPI-3 / soil-moisture
+    light instead."""
+    return {"green": ("#79c47e", "no water stress (SPI-3 / soil moisture)"),
+            "yellow": ("#e8c84d", "watch (SPI-3 ≤ −1 or soil moisture < 85%)"),
+            "red": ("#d95f4b", "stress (SPI-3 ≤ −1.5 and soil moisture < 85%)"),
+            }.get(status, ("#d8d8d8", "no data"))
+
+
+def _flood_color(r):
+    """Basin flood-watch state -> (fill, label); r is a flood_state row
+    (latest pentad) or None."""
+    if r is None:
+        return "#d8d8d8", "no data"
+    if r.tier >= 2:
+        return "#d95f4b", "basin flood ALERT"
+    if r.tier >= 1:
+        return "#ec9b3b", "basin WATCH (armed)"
+    if (r.pct_normal or 0) >= 150:
+        return "#e8c84d", "heavy pentad (≥150% of normal)"
+    return "#a8c6e4", "quiet"
+
+
+def _rings(feature):
+    """Outer rings of a GeoJSON (Multi)Polygon as (xs, ys) pairs."""
+    polys = feature["geometry"]["coordinates"]
+    if feature["geometry"]["type"] == "Polygon":
+        polys = [polys]
+    for rings in polys:
+        yield [p[0] for p in rings[0]], [p[1] for p in rings[0]]
+
+
+def _africa_base(fig, outlines, label=True):
+    """Draw every monitored country's outline; returns the overall bbox."""
+    bounds = None
+    for f in outlines["features"]:
+        iso = f["properties"]["iso3"]
+        fx, fy = [], []
+        for xs, ys in _rings(f):
+            fx += xs
+            fy += ys
+            bounds = [min(xs), min(ys), max(xs), max(ys)] if bounds is None \
+                else [min(bounds[0], min(xs)), min(bounds[1], min(ys)),
+                      max(bounds[2], max(xs)), max(bounds[3], max(ys))]
+            fig.add_scatter(x=xs, y=ys, mode="lines",
+                            line=dict(color="#8c8c8c", width=0.9),
+                            fill="toself", fillcolor="#f4f1ea",
+                            hoverinfo="skip", showlegend=False)
+        if label and fx:
+            fig.add_annotation(x=(min(fx) + max(fx)) / 2,
+                               y=(min(fy) + max(fy)) / 2,
+                               text=NAMES_CR.get(iso, iso), showarrow=False,
+                               font=dict(size=10, color="#6b6b6b"),
+                               opacity=0.85)
+    return bounds
+
+
+def _africa_layout(fig, bounds, title, height=760):
+    fig.update_layout(
+        height=height, margin=dict(l=0, r=0, t=34, b=0),
+        title=dict(text=title, font=dict(size=13)),
+        xaxis=dict(visible=False, range=None if bounds is None else
+                   [bounds[0] - 1, bounds[2] + 1]),
+        yaxis=dict(visible=False, scaleanchor="x",
+                   range=None if bounds is None else
+                   [bounds[1] - 1, bounds[3] + 1]),
+        plot_bgcolor="white", dragmode="pan")
 
 
 def drought_region_block(expander: bool = True) -> None:
@@ -148,7 +234,9 @@ def drought_region_block(expander: bool = True) -> None:
         drows, dfills = [], []
         for _, z in zrisk.iterrows():
             wr_txt, wr_fill = "—", ""
-            if pd.notna(z.wrsi):
+            if z.factor == "export":
+                wr_txt = "n/a · perennial"
+            elif pd.notna(z.wrsi):
                 if z.wrsi_in_season:
                     wr_txt = f"{z.wrsi:.0f}"
                     wr_fill = FILL["red"] if z.wrsi < 80 else \
@@ -303,6 +391,103 @@ if view == "Overview":
         log = log.assign(prev=_dotted(log.prev),
                          status=_dotted(log.status))
         st.dataframe(log, hide_index=True, use_container_width=True)
+
+    # ---- Africa maps: WRSI by growing zone, flood watch by basin ---------
+    _zgj_all = _json.loads((_dbdir.parent / "data/zones/zones.geojson")
+                           .read_text())
+    _outl_path = _dbdir.parent / "data/zones/country_outlines.geojson"
+    _outl = _json.loads(_outl_path.read_text()) if _outl_path.exists() \
+        else {"features": []}
+    _bgj_all_path = _dbdir.parent / "data/zones/basins.geojson"
+    _bgj_all = _json.loads(_bgj_all_path.read_text()) \
+        if _bgj_all_path.exists() else {"features": []}
+    _sector_of = zones.set_index("zone_key")["sector"].to_dict() \
+        if "sector" in zones.columns else {}
+    tab_w, tab_f = st.tabs(["Crop water stress (WRSI) — all countries",
+                            "Flood watch — all basins"])
+    with tab_w:
+        _zr = load("SELECT zone_key, wrsi, wrsi_in_season, spi3, sm, season "
+                   "FROM zone_risk WHERE factor='drought'") \
+            .drop_duplicates("zone_key").set_index("zone_key")
+        fw = go.Figure()
+        _b = _africa_base(fw, _outl)
+        _n_live = 0
+        for f in _zgj_all["features"]:
+            p = f["properties"]
+            zk = p["zone_key"]
+            # staple cereal zones only: WRSI models an annual crop cycle,
+            # so the perennial export belts are left off this map
+            if zk in COMPOSITE_KEYS or _sector_of.get(zk) == "export":
+                continue
+            r = _zr.loc[zk] if zk in _zr.index else None
+            w = None if r is None else r.wrsi
+            ins = 0 if r is None else r.wrsi_in_season
+            fc, blab = _wrsi_band(w, ins)
+            _n_live += int(bool(ins))
+            hover = (f"<b>{zone_label.get(zk, zk)}</b><br>"
+                     f"{NAMES_CR.get(p.get('iso3'), p.get('iso3'))}<br>"
+                     f"WRSI: {'—' if w is None or pd.isna(w) else f'{w:.0f}'}"
+                     f" ({blab})<br>"
+                     + ("" if r is None or not r.season
+                        else f"Season: {r.season}<br>")
+                     + ("" if r is None or pd.isna(r.spi3)
+                        else f"SPI-3: {r.spi3:.1f}<br>")
+                     + ("" if r is None or pd.isna(r.sm)
+                        else f"Soil moisture: {r.sm:.0f}%")
+                     + "<extra></extra>")
+            for xs, ys in _rings(f):
+                fw.add_scatter(x=xs, y=ys, mode="lines", fill="toself",
+                               fillcolor=fc, opacity=0.9, name="",
+                               line=dict(color="white", width=0.5),
+                               hovertemplate=hover, showlegend=False)
+        _africa_layout(fw, _b, f"WRSI by growing zone — {_n_live} zones "
+                               "in season (hover for detail)")
+        st.plotly_chart(fw, use_container_width=True)
+        st.caption("Staple-crop zones shaded by the latest WRSI, % of "
+                   "median: green ≥95, gold 80–94, orange 60–79, red <60. "
+                   "Gray = outside the zone's growing season (the index "
+                   "reads ~100 off-season and is not a signal) or no data. "
+                   "Export belts (coffee, tea, cocoa, tobacco…) are "
+                   "perennials with no cereal crop cycle, so they carry no "
+                   "WRSI and are not drawn here — see the export column on "
+                   "the board and the Country tab.")
+    with tab_f:
+        _bs = load("SELECT zone_key, tier, pct_normal, ante_pct, "
+                   "MAX(granule_start) AS g FROM flood_state "
+                   "GROUP BY zone_key").set_index("zone_key")
+        ff = go.Figure()
+        _b = _africa_base(ff, _outl)
+        _n_arm = 0
+        for f in _bgj_all["features"]:
+            p = f["properties"]
+            zk = p["zone_key"]
+            if not zk.startswith("bas_"):
+                continue  # hydro catchments share this file
+            r = _bs.loc[zk] if zk in _bs.index else None
+            fc, blab = _flood_color(r)
+            _n_arm += int(r is not None and r.tier >= 1)
+            hover = (f"<b>{p.get('name', zk)}</b> — {blab}<br>"
+                     f"{NAMES_CR.get(p.get('iso3'), p.get('iso3'))}<br>"
+                     + ("" if r is None else
+                        f"{0 if pd.isna(r.pct_normal) else r.pct_normal:.0f}"
+                        "% of normal pentad rain<br>antecedent wetness "
+                        f"p{0 if pd.isna(r.ante_pct) else r.ante_pct:.0f} "
+                        f"(through {r.g})")
+                     + "<extra></extra>")
+            for xs, ys in _rings(f):
+                ff.add_scatter(x=xs, y=ys, mode="lines", fill="toself",
+                               fillcolor=fc, opacity=0.75, name="",
+                               line=dict(color="#4a6fa5", width=0.8),
+                               hovertemplate=hover, showlegend=False)
+        _africa_layout(ff, _b, f"Flood watch by basin — {_n_arm} basins "
+                               "armed or alerting (hover for detail)")
+        st.plotly_chart(ff, use_container_width=True)
+        st.caption("Flood-watch basins: blue = quiet, gold = heavy pentad "
+                   "(≥150% of normal), orange = armed (catchment saturated "
+                   "or parched + rain building), red = basin flood alert. "
+                   "Gray = no data. The country Flood light on the board "
+                   "is the worst of its basins; open the Country tab for "
+                   "the basin timelines.")
 
     # ---- climate drivers: ENSO left, IOD right ---------------------------
     with st.expander("Climate drivers — weekly Niño 3.4, IOD"):
@@ -1459,20 +1644,7 @@ _ciso = st.sidebar.selectbox("Country", _iso_opts,
 _czones = zones[zones.iso3 == _ciso]
 
 
-def _wrsi_band(w, ins):
-    """Mirror the WRSI chart bands (gold 80-94, orange 60-79, red <60)."""
-    if w is None or pd.isna(w) or not ins:
-        return "#d8d8d8", "off-season / no data"
-    if w >= 95:
-        return "#79c47e", "normal (≥95)"
-    if w >= 80:
-        return "#e8c84d", "mild stress (80–94)"
-    if w >= 60:
-        return "#ec9b3b", "stressed (60–79)"
-    return "#d95f4b", "crop-failure risk (<60)"
-
-
-_zrisk_map = load("SELECT zone_key, wrsi, wrsi_in_season, spi3, sm, "
+_zrisk_map = load("SELECT zone_key, status, wrsi, wrsi_in_season, spi3, sm, "
                   "season FROM zone_risk WHERE factor IN "
                   "('drought','export')").drop_duplicates("zone_key") \
     .set_index("zone_key")
@@ -1541,9 +1713,6 @@ for f in _zgj["features"]:
                    "zaf_maize_triangle"):
         continue
     r = _zrisk_map.loc[zk] if zk in _zrisk_map.index else None
-    w = None if r is None else r.wrsi
-    ins = 0 if r is None else r.wrsi_in_season
-    fc, blab = _wrsi_band(w, ins)
     meta = _czones.set_index("zone_key").loc[zk] \
         if zk in set(_czones.zone_key) else None
     sector = getattr(meta, "sector", None) or "staple"
@@ -1551,11 +1720,22 @@ for f in _zgj["features"]:
             (_crop_layer == "Staple only" and sector == "export") or \
             (_crop_layer == "Export only" and sector != "export"):
         continue
+    if sector == "export":
+        # perennials carry no WRSI: the belt takes its SPI-3 / soil-
+        # moisture light colour and no number label
+        w, ins = None, 0
+        fc, blab = _status_fill(None if r is None else r.status)
+        wr_line = "WRSI: n/a (perennial crop)"
+    else:
+        w = None if r is None else r.wrsi
+        ins = 0 if r is None else r.wrsi_in_season
+        fc, blab = _wrsi_band(w, ins)
+        wr_line = (f"WRSI: {'—' if w is None or pd.isna(w) else f'{w:.0f}'}"
+                   f" ({blab})")
     hover = (f"<b>{zone_label.get(zk, zk)}</b><br>"
              f"{(getattr(meta, 'crop', None) or '?')}"
-             f"{' · export belt' if sector == 'export' else ''}<br>"
-             f"WRSI: {'—' if w is None or pd.isna(w) else f'{w:.0f}'} "
-             f"({blab})<br>"
+             f"{' · export belt — ' + blab if sector == 'export' else ''}<br>"
+             f"{wr_line}<br>"
              + ("" if r is None or pd.isna(r.spi3)
                 else f"SPI-3: {r.spi3:.1f}<br>")
              + ("" if r is None or pd.isna(r.sm)
@@ -1586,23 +1766,11 @@ if _show_flood:
         "MAX(granule_start) AS g FROM flood_state GROUP BY zone_key"
     ).set_index("zone_key")
 
-    def _overlay_color(zk):
-        if zk not in _bstate.index:
-            return "#d8d8d8", "no data"
-        r = _bstate.loc[zk]
-        if r.tier >= 2:
-            return "#d95f4b", "basin flood ALERT"
-        if r.tier >= 1:
-            return "#ec9b3b", "basin WATCH (armed)"
-        if (r.pct_normal or 0) >= 150:
-            return "#e8c84d", "heavy pentad (≥150% of normal)"
-        return "#a8c6e4", "quiet"
-
     for f in _cbasins:
         p = f["properties"]
         zk = p["zone_key"]
-        fc, blab = _overlay_color(zk)
         r = _bstate.loc[zk] if zk in _bstate.index else None
+        fc, blab = _flood_color(r)
         hover = (f"<b>{p.get('name', zk)}</b> — {blab}<br>"
                  + ("" if r is None else
                     f"{0 if pd.isna(r.pct_normal) else r.pct_normal:.0f}% "
@@ -1744,6 +1912,9 @@ zone_key = st.sidebar.selectbox(
     index=_opts.index(_default) if _default in _opts else 0,
     format_func=lambda k: zone_label[k])
 zrow = zones.set_index("zone_key").loc[zone_key]
+# perennial export belts: WRSI (an annual cereal crop-cycle model) is not
+# shown or benchmarked for them — rainfall, SPI and soil moisture only
+_is_export = getattr(zrow, "sector", None) == "export"
 
 # ---- season handling ----------------------------------------------------
 seasons = []
@@ -1865,7 +2036,10 @@ if not cur.empty:
 lw = load("SELECT granule_start, value FROM observations WHERE zone_key=? "
           "AND dataset='lwrsi_africa_dekad_pctm' ORDER BY granule_start",
           (zone_key,))
-if not lw.empty:
+if _is_export:
+    c3.metric("Water Req. Satisfaction Index", "n/a",
+              "perennial crop — no cereal cycle", delta_color="off")
+elif not lw.empty:
     c3.metric("Water Req. Satisfaction Index (% of median)", f"{lw.value.iloc[-1]:.0f}%",
               lw.granule_start.iloc[-1], delta_color="off")
 sm = load("SELECT granule_start, value FROM observations WHERE zone_key=? "
@@ -1951,7 +2125,12 @@ if not rate.empty:
 # ---- WRSI and soil moisture panels --------------------------------------
 col_a, col_b = st.columns(2)
 with col_a:
-    if not lw.empty:
+    if _is_export:
+        st.info("WRSI is not applied to this export belt: the index models "
+                "an annual cereal's water requirement through its growth "
+                "stages and has no meaning for a perennial crop. Stress "
+                "here is read from SPI-3 and root-zone soil moisture.")
+    elif not lw.empty:
         lw["date"] = pd.to_datetime(lw.granule_start)
         f2 = go.Figure()
         f2.add_scatter(x=lw.date, y=lw.value,
@@ -2090,6 +2269,8 @@ with st.expander("El Niño benchmarks — current vs worst prints of 2015-16 "
                  "and 2023-24", expanded=False):
     brows = []
     for label, ds in BENCH_DS.items():
+        if _is_export and ds == "lwrsi_africa_dekad_pctm":
+            continue
         cur = load("SELECT value, granule_start FROM observations WHERE "
                    "zone_key=? AND dataset=? ORDER BY granule_start DESC "
                    "LIMIT 1", (zone_key, ds))
@@ -2122,6 +2303,8 @@ with st.expander("El Niño benchmarks — current vs worst prints of 2015-16 "
 # ---- all-zones anomaly table --------------------------------------------
 st.subheader("All zones — latest readings")
 rows = []
+_sector_all = zones.set_index("zone_key")["sector"].to_dict() \
+    if "sector" in zones.columns else {}
 for zk in zones.zone_key:
     r = {"zone": zone_label[zk]}
     d = load("SELECT dataset, granule_start, value FROM observations "
@@ -2132,6 +2315,9 @@ for zk in zones.zone_key:
                       ("soilmoisture-0-100cm_global_month_pctm", "SM %mean"),
                       ("chirps_global_month_zscore", "CHIRPS mth z-score")]:
         sub = d[d.dataset == ds]
+        if ds == "lwrsi_africa_dekad_pctm" and _sector_all.get(zk) == "export":
+            r[label] = None  # perennial belt: WRSI not applicable
+            continue
         r[label] = round(sub.value.iloc[-1], 1) if not sub.empty else None
     rows.append(r)
 st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)

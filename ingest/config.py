@@ -20,10 +20,13 @@ FIRST_SEASON = 1981
 
 # zone_key: (country_iso3, name, lat, lon, [(season_name, start_m, end_m), ...])
 ZONES = {
+    # bimodal like the auto-expanded Kenya zones: the OND short rains are
+    # a real (if secondary) maize season in the Rift — without the window
+    # the WRSI greys out from October
     "ken_uasin_gishu": ("KEN", "Kenya grain basket (Uasin Gishu)", 0.52, 35.27,
-                        [("long_rains", 3, 9)]),
+                        [("long_rains", 3, 9), ("short_rains", 10, 1)]),
     "ken_trans_nzoia": ("KEN", "Kenya grain basket (Trans Nzoia)", 1.02, 35.00,
-                        [("long_rains", 3, 9)]),
+                        [("long_rains", 3, 9), ("short_rains", 10, 1)]),
     # anchor must fall inside a crop-zone polygon or the API 500s;
     # this is the Oromia small-grains (wheat/barley) highland belt
     "eth_arsi":       ("ETH", "Ethiopia Oromia highlands (wheat/barley)",
@@ -71,6 +74,14 @@ ZONES = {
                        [("main", 10, 4)]),
     "zaf_mpumalanga": ("ZAF", "South Africa Mpumalanga", -25.9954, 29.9151,
                        [("main", 10, 4)]),
+}
+
+# composite (union) zones built by zones_geo.py have no ZONES entry; their
+# season windows live here so metrics and the zones table agree
+COMPOSITE_SEASONS = {
+    "ken_grain_basket": [("long_rains", 3, 9), ("short_rains", 10, 1)],
+    "zmb_maize_belt": [("main", 10, 4)],
+    "zaf_maize_triangle": [("main", 10, 4)],
 }
 
 # V2.2 auto-expanded zones (compute/zone_expand.py): production-ranked

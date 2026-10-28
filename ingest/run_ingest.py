@@ -12,7 +12,7 @@ import sys
 import time
 
 from config import (ZONES, DATASETS, CROPZONE_VECTOR, VECTOR_OVERRIDES,
-                    FIRST_SEASON, EXPORT_CROP)
+                    FIRST_SEASON, EXPORT_CROP, COMPOSITE_SEASONS)
 import db
 import ewx_api
 
@@ -96,6 +96,12 @@ def main() -> int:
             con.commit()
             time.sleep(3)  # be polite to the .gov endpoint
 
+    # composite zones have no ingest loop of their own; keep their season
+    # windows in step with config so the in-season flag matches metrics
+    for ck, seas in COMPOSITE_SEASONS.items():
+        con.execute("UPDATE zones SET seasons=? WHERE zone_key=?",
+                    (",".join(f"{n}:{a}-{b}" for n, a, b in seas), ck))
+    con.commit()
     con.close()
     if failures:
         print(f"\n{len(failures)} fetch failures", file=sys.stderr)

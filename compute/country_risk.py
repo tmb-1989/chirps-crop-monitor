@@ -489,16 +489,22 @@ def drought_zones(con, today: dt.date, sector: str = "staple"
         sp = spi[spi.zone_key == z.zone_key]
         s3 = sp.spi3.iloc[0] if not sp.empty else None
         s3_d = sp.granule_start.iloc[0] if not sp.empty else None
+        # perennial export belts (coffee, tea, cocoa...) have no cereal
+        # crop cycle for WRSI to model — the belt's light runs on SPI-3
+        # and soil moisture only
+        if sector == "export":
+            wr, wr_d = None, None
         wr_win = None if wr_d is None else \
             window_of(z.seasons, dt.date.fromisoformat(wr_d).month)
         wr_season = wr_win[0] if wr_win else None
-        # a reading in the first month of a window is not yet a season
-        # signal — early dekads read as extremes (RWA Sep 2026)
+        # the first dekad of a window is not yet a season signal (it reads
+        # as an extreme — RWA Sep 2026); from the second dekad the index
+        # is in play. Was 30 days, which blanked a third of each season.
         if wr_win and wr_d:
             rd = dt.date.fromisoformat(wr_d)
             start = dt.date(rd.year - (1 if wr_win[1] > rd.month else 0),
                             wr_win[1], 1)
-            if (rd - start).days < 30:
+            if (rd - start).days < 10:
                 wr_season = None
         wr_ok = _age(wr_d, today) <= STALE["wrsi"] and wr is not None \
             and wr_season is not None

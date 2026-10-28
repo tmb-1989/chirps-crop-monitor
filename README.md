@@ -58,6 +58,23 @@ Gray = inputs missing or stale, never "safe". Snapshot in `country_risk`,
 transitions in `country_risk_log`, per-zone drought lights (the board's
 drill-down expander) in `zone_risk` (`compute/country_risk.py`).
 
+WRSI rules (Oct 2026): a reading counts as in-season when its dekad falls
+inside one of the zone's configured windows and is not the window's
+*first* dekad (the opening dekad reads as an extreme — RWA Sep 2026; the
+earlier 30-day blackout hid a third of every season and greyed East
+Africa through the OND short rains). Kenya's grain-basket zones carry
+both `long_rains:3-9` and `short_rains:10-1`. **Export belts (coffee,
+tea, cocoa, tobacco, cashew, vanilla, cotton) carry no WRSI at all** —
+the index models an annual cereal's growth-stage water requirement and
+has no meaning for perennials — so their light is SPI-3 + soil moisture
+only, and they are omitted from the Overview's WRSI map.
+
+The Overview also carries two Africa-wide maps (shared helpers at the
+top of `app/streamlit_app.py`): every staple zone shaded by its latest
+in-season WRSI, and every flood-watch basin shaded by its current tier,
+both drawn inside the monitored countries' outlines
+(`data/zones/country_outlines.geojson`).
+
 ## Flood-watch layer
 
 Basin-level flood signals over 24 HydroBASINS level-7 basins in **Kenya

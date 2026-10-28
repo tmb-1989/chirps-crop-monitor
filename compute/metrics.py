@@ -55,11 +55,7 @@ CREATE TABLE IF NOT EXISTS season_metrics (
 """
 
 # season windows for composites (config covers the rest)
-EXTRA_SEASONS = {
-    "ken_grain_basket": [("long_rains", 3, 9)],
-    "zmb_maize_belt": [("main", 10, 4)],
-    "zaf_maize_triangle": [("main", 10, 4)],
-}
+from config import COMPOSITE_SEASONS as EXTRA_SEASONS  # noqa: E402
 
 
 def dekad_of_year(d: dt.date) -> int:
