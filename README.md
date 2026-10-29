@@ -58,11 +58,19 @@ Gray = inputs missing or stale, never "safe". Snapshot in `country_risk`,
 transitions in `country_risk_log`, per-zone drought lights (the board's
 drill-down expander) in `zone_risk` (`compute/country_risk.py`).
 
-WRSI rules (Oct 2026): a reading counts as in-season when its dekad falls
-inside one of the zone's configured windows and is not the window's
-*first* dekad (the opening dekad reads as an extreme — RWA Sep 2026; the
-earlier 30-day blackout hid a third of every season and greyed East
-Africa through the OND short rains). Kenya's grain-basket zones carry
+WRSI rules (29 Oct 2026): a reading counts — board light, status
+emails and the CPI impulse alike — when its dekad falls inside one of the
+zone's configured windows **and** the window is at least
+`config.WRSI_MIN_SEASON_DAYS` (60) days old (one gate,
+`config.wrsi_reading_counts`, used by `country_risk` and `cpi_impulse`;
+`tests/test_wrsi_gate.py` checks they agree). The 60 days are evidence-
+based: over 2010–26 a pctm <80 in a window's first two dekads ended the
+season <80 only 4–5% of the time (base rate 7.9%), and early readings
+were uncorrelated with the end-of-season value until ~dekad 6. Readings
+inside the window but before the gate are stored with
+`zone_risk.wrsi_early=1` and drawn pale blue ("early season — not yet a
+signal") on the maps, so an open season is visibly open without
+driving a light. Kenya's grain-basket zones carry
 both `long_rains:3-9` and `short_rains:10-1`. **Export belts (coffee,
 tea, cocoa, tobacco, cashew, vanilla, cotton) carry no WRSI at all** —
 the index models an annual cereal's growth-stage water requirement and
@@ -257,7 +265,13 @@ ingested, so off-dekad days are cheap).
 
 ## Gotchas
 
-- LWRSI `pctm` is % of the 1982–2021 median (100 = normal; <80 stress).
+- LWRSI `pctm` is the **Landscape** WRSI (generic crop, not maize) as % of
+  the 1982–2021 median for the same dekad (base confirmed in the EWX
+  catalog). 100 = normal. The 95/80/60 cut-offs are applied to this
+  anomaly, so the bands are labelled near normal / below normal / well
+  below normal / severe deficit — not the FEWS NET absolute-WRSI
+  crop-condition classes (<50 failure). Map hovers show the absolute
+  LWRSI beside it.
 - Crop zones = crop polygons ∩ admin-1, so "zone" granularity is province.
 - `revisions` table logs any value change on re-ingest (prelim→final).
 - Phase 2 (planned): own CHIRPS v3 raster pipeline from data.chc.ucsb.edu as

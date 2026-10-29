@@ -76,6 +76,21 @@ ZONES = {
                        [("main", 10, 4)]),
 }
 
+# A WRSI reading counts (board light, alert emails, CPI impulse) only once
+# the season window is this many days old. Evidence (29 Oct 2026, staple
+# zones 2010-26, app.sqlite): a pctm <80 in the first two dekads ended
+# the season <80 only 4-5% of the time (base rate 7.9%) and the
+# correlation with the end-of-season value was ~0 through dekad 4,
+# 0.21 at dekad 6 (day 60), 0.36 at dekad 8. Was 10 days on the board
+# and 30 in cpi_impulse. Readings inside the gap show as "early season".
+WRSI_MIN_SEASON_DAYS = 60
+
+
+def wrsi_reading_counts(reading_date, season_start) -> bool:
+    """Shared season-start gate for country_risk and cpi_impulse."""
+    return (reading_date - season_start).days >= WRSI_MIN_SEASON_DAYS
+
+
 # composite (union) zones built by zones_geo.py have no ZONES entry; their
 # season windows live here so metrics and the zones table agree
 COMPOSITE_SEASONS = {

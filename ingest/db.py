@@ -81,9 +81,17 @@ def connect() -> sqlite3.Connection:
 
 
 def upsert_zone(con, zone_key, iso3, name, lat, lon, info, seasons):
+    # a failed WFS lookup (info=None) must not wipe a known crop/admin
+    # label — INSERT OR REPLACE did, leaving rwa_northern unlabelled
     con.execute(
-        "INSERT OR REPLACE INTO zones (zone_key, iso3, name, lat, lon, "
-        "crop, adm0, adm1, seasons) VALUES (?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO zones (zone_key, iso3, name, lat, lon, "
+        "crop, adm0, adm1, seasons) VALUES (?,?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(zone_key) DO UPDATE SET iso3=excluded.iso3, "
+        "name=excluded.name, lat=excluded.lat, lon=excluded.lon, "
+        "crop=COALESCE(excluded.crop, zones.crop), "
+        "adm0=COALESCE(excluded.adm0, zones.adm0), "
+        "adm1=COALESCE(excluded.adm1, zones.adm1), "
+        "seasons=excluded.seasons",
         (zone_key, iso3, name, lat, lon,
          (info or {}).get("crop"), (info or {}).get("adm0"),
          (info or {}).get("adm1"), seasons))

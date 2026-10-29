@@ -25,8 +25,10 @@ WRSI 60 ⇒ ~50% yield loss; WRSI 80 ⇒ ~25%; <50 ⇒ failure. Empirical
 skill: r ≈ 0.75 vs sub-national yields (Verdin & Klaver 2002), R² ≈
 0.52–0.61 with CHIRPS-driven WRSI (Tanzania study) — so carry a ±
 band reflecting ~half the variance being non-water (pests, inputs,
-management), not a point estimate. Mid-season WRSI is provisional
-(can only fall); label pre-flowering estimates "ceiling so far".
+management), not a point estimate. Mid-season WRSI is provisional:
+the absolute index can only fall, but the % of median can recover if
+later dekads beat the median path — so label pre-flowering estimates
+"provisional", not "ceiling so far".
 
 **Leg B — production shock → food CPI (macro, established separately).**
 - Zone shocks → national production shock: weight each zone by its
@@ -115,9 +117,28 @@ New `compute/cpi_impulse.py`, run after `metrics.py` in the daily chain:
 - FX pass-through can swamp the weather signal (IMF WP/24/59); the
   impulse is *ceteris paribus* on the exchange rate, say so on the
   panel.
-- WRSI is maize-parameterized in our feed; applying it to mixed-crop
-  zones (RWA sorghum polygon) inherits FAO Ky mismatch — use
-  crop-specific Ky where the zone's crop mask differs.
+- The feed is the FEWS NET **Landscape** WRSI (`lwrsi_africa_dekad_pctm`):
+  one *generic* crop per pixel, not maize- or sorghum-parameterized, and
+  blind to short- vs long-cycle varieties. Only Ky depends on the crop,
+  via the modelled commodity in `production_weights.csv` (GAEZ
+  production). Where that differs from the FEWS NET polygon label the
+  zone carries the commodity's Ky — 11 sorghum polygons in northern
+  Nigeria/Ghana are modelled as Maize (Ky 1.25 vs 0.90: shock ×1.39),
+  `civ_savanes` maize→Rice (×0.88). List them with
+  `python compute/crop_label_check.py` (`--app-db` on a dev checkout).
+  Crop-specific WRSI does exist in EWX (South maize Oct–May, East
+  maize Oct–Feb / Mar–Nov, West millet May–Nov, `wrsi-*` products) —
+  a candidate for the main zones, but it needs its own hindcast before
+  replacing LWRSI.
+- Leg A's `Ky (1 − pctm/100)` approximates the exact FAO 33 shortfall
+  vs a median year, `Ky (W̄ − W)/(1 − Ky(1 − W̄))`: it understates the
+  shock when Ky > 1 (~6% at W̄ 0.80, ~17% at 0.60, Ky 1.25) and
+  overstates it when Ky < 1. Kept because the exact form needs the
+  biased absolute W̄ — see `leg_a` docstring.
+- The zone value is the polygon mean of pixel pctm: a failure in part
+  of a large polygon (e.g. `eth_oromia_maize`) reads as a mild average
+  deficit. An area-share-below-80 or P10 from the local raster
+  pipeline would expose it (not built).
 - Floods destroy crops too (the wet channel WRSI cannot see) — a
   flood-hit season can have fine WRSI and a real price shock; the
   flood layer's alerts should veto "no impulse" complacency.

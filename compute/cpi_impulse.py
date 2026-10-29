@@ -10,7 +10,9 @@ the Sep 2026 hindcast showed the absolute form has zero price skill
 (49% sign accuracy) while the pctm form reaches ~70% with sane drought
 counts. WRSI explains ~half of yield variance (R^2 0.52-0.61
 CHIRPS-driven), so the shock carries an uncertainty band, not a point.
-Mid-season values are a ceiling-so-far, labelled provisional.
+Mid-season values are labelled provisional: the absolute LWRSI can only
+fall within a season, but pctm can recover if later dekads beat the
+median path, so a mid-season read is neither a ceiling nor a floor.
 
 Prices are compared in USD (usd_kg): local-currency series are unusable
 for ZWE-class inflation/redenomination histories.
@@ -44,6 +46,7 @@ import pandas as pd
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "ingest"))
 import db  # noqa: E402
+from config import wrsi_reading_counts  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ECON = ROOT / "data" / "econ"
@@ -62,7 +65,7 @@ CREATE TABLE IF NOT EXISTS live.zone_output_shock (
     commodity   TEXT NOT NULL,
     wrsi        REAL,
     in_season   INTEGER,
-    provisional INTEGER,           -- 1 = pre-season-end (ceiling so far)
+    provisional INTEGER,           -- 1 = pre-season-end (can still move)
     shock       REAL,              -- fraction of potential yield lost
     shock_p10   REAL,
     shock_p90   REAL,
@@ -172,16 +175,29 @@ def current_wrsi(con, zk: str, seasons: str,
                     "granule_start BETWEEN ? AND ? "
                     "ORDER BY granule_start DESC LIMIT 1",
                     (zk, start.isoformat(), end.isoformat())).fetchone()
-                # a season less than ~1 month in has no meaningful WRSI
-                # yet — early dekads read as extremes (RWA Sep 2026)
-                if row and dt.date.fromisoformat(row[1]) >= \
-                        start + dt.timedelta(days=30):
+                # early-season WRSI has no outcome skill — shared gate
+                # with the board (config.WRSI_MIN_SEASON_DAYS)
+                if row and wrsi_reading_counts(
+                        dt.date.fromisoformat(row[1]), start):
                     return (row[0], row[1], int(today <= end),
                             name.replace("_", " "))
     return None
 
 
 def leg_a(wrsi: float, ky: float, rng=None):
+    """Zone yield shock vs a median year from WRSI % of median.
+
+    Approximation: FAO 33 gives 1 - Ya/Ym = Ky(1 - W), W = ETa/ETm. The
+    exact shortfall against a median year (median W_bar, current W) is
+        Ky (W_bar - W) / (1 - Ky (1 - W_bar))
+    while this uses Ky (W_bar - W) / W_bar = Ky (1 - pctm/100). Bias:
+    for Ky > 1 (maize, wheat, rice) it UNDERSTATES the shock — by ~1% at
+    W_bar 0.95, ~6% at 0.80, ~17% at 0.60 (Ky 1.25); for Ky < 1
+    (sorghum, 0.90) it OVERSTATES — ~2.5% at 0.80, ~6% at 0.60. The exact
+    form needs absolute W_bar, which carries the mask/window bias in the
+    module docstring, so the approximation stays. SHOCK_SD_FRAC (0.35)
+    spans the bias for W_bar >= ~0.6, but the bias is one-signed, not
+    noise: for low-median maize zones read the P50 as a floor-ish case."""
     shock = float(np.clip(ky * (1 - wrsi / 100.0), 0, 1))
     sd = max(SHOCK_SD_FRAC * shock, SHOCK_SD_FLOOR)
     if rng is None:

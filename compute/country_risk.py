@@ -27,6 +27,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "ingest"))
 sys.path.insert(0, str(ROOT / "compute"))
 import db  # noqa: E402
+from config import wrsi_reading_counts  # noqa: E402
 import enso  # noqa: E402
 import iod  # noqa: E402
 import kariba  # noqa: E402
@@ -131,6 +132,7 @@ CREATE TABLE IF NOT EXISTS live.zone_risk (
     as_of    TEXT,
     computed_at TEXT,
     season   TEXT,
+    wrsi_early INTEGER,
     PRIMARY KEY (zone_key, factor)
 );
 """
@@ -467,7 +469,8 @@ def drought_zones(con, today: dt.date, sector: str = "staple"
         return pd.DataFrame(columns=["zone_key", "country", "name",
                                      "status", "reason", "wrsi",
                                      "wrsi_in_season", "spi3", "sm",
-                                     "season", "as_of", "_sev"])
+                                     "season", "wrsi_early", "as_of",
+                                     "_sev"])
     latest = pd.read_sql_query(
         "SELECT zone_key, dataset, granule_start, value FROM observations "
         "WHERE dataset IN ('lwrsi_africa_dekad_pctm',"
@@ -497,15 +500,17 @@ def drought_zones(con, today: dt.date, sector: str = "staple"
         wr_win = None if wr_d is None else \
             window_of(z.seasons, dt.date.fromisoformat(wr_d).month)
         wr_season = wr_win[0] if wr_win else None
-        # the first dekad of a window is not yet a season signal (it reads
-        # as an extreme — RWA Sep 2026); from the second dekad the index
-        # is in play. Was 30 days, which blanked a third of each season.
+        # inside the window but before the shared gate: the reading has no
+        # outcome skill yet — keep it as "early season", not a signal
+        wr_early, wr_early_season = 0, None
         if wr_win and wr_d:
             rd = dt.date.fromisoformat(wr_d)
             start = dt.date(rd.year - (1 if wr_win[1] > rd.month else 0),
                             wr_win[1], 1)
-            if (rd - start).days < 10:
-                wr_season = None
+            if not wrsi_reading_counts(rd, start):
+                wr_early = int(wr is not None and
+                               _age(wr_d, today) <= STALE["wrsi"])
+                wr_early_season, wr_season = wr_season, None
         wr_ok = _age(wr_d, today) <= STALE["wrsi"] and wr is not None \
             and wr_season is not None
         sm_ok = sm is not None and _age(sm_d, today) <= STALE["sm"]
@@ -530,7 +535,9 @@ def drought_zones(con, today: dt.date, sector: str = "staple"
             "wrsi": wr if wr is not None else None,
             "wrsi_in_season": int(bool(wr_ok)),
             "spi3": s3, "sm": sm,
-            "season": wr_season if wr_ok else None,
+            "season": wr_season if wr_ok else
+                      (wr_early_season if wr_early else None),
+            "wrsi_early": wr_early,
             "as_of": wr_d if wr_ok else (s3_d or sm_d or wr_d),
             # severity for the country rollup: worse status first, then
             # lower in-season WRSI, then lower SPI-3
@@ -632,11 +639,16 @@ def main() -> int:
     if "season" not in [r[1] for r in con.execute(
             "SELECT * FROM pragma_table_info('zone_risk', 'live')")]:
         con.execute("ALTER TABLE live.zone_risk ADD COLUMN season TEXT")
+    if "wrsi_early" not in [r[1] for r in con.execute(
+            "SELECT * FROM pragma_table_info('zone_risk', 'live')")]:
+        con.execute("ALTER TABLE live.zone_risk ADD COLUMN wrsi_early "
+                    "INTEGER")
     con.executemany(
         "INSERT OR REPLACE INTO zone_risk VALUES "
-        "(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         [(r.zone_key, fac, r.country, r["name"], r.status, r.reason,
-          r.wrsi, r.wrsi_in_season, r.spi3, r.sm, r.as_of, now, r.season)
+          r.wrsi, r.wrsi_in_season, r.spi3, r.sm, r.as_of, now, r.season,
+          r.wrsi_early)
          for fac, frame in (("drought", zr), ("export", zx))
          for _, r in frame.iterrows()])
     prev = {(r[0], r[1]): r[2] for r in con.execute(

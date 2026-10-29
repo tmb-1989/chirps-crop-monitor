@@ -68,14 +68,20 @@ rainfall in standard deviations from normal — comparable across zones;
 |z| ≥ 2 is a roughly 1-in-40 extreme. In-season prints matter; dry-season
 z-scores are noise.
 
-**WRSI — Water Requirement Satisfaction Index** — an FAO crop-water model
-tracking how much of the maize crop's water *requirement* was met, dekad
-by dekad, weighted by growth stage. Shown as % of the 1982–2021 median
-for the same point in the season: ~100 = normal year. **80–94 = mild
-stress · 60–80 = moderate stress (yield loss) · below 60 = severe
-stress/failure.** Deficits are permanent within a season — the index
-never recovers even if late rains arrive — making it the best single
-harvest proxy. Only meaningful in-season (reads ~100 off-season).
+**WRSI — Water Requirement Satisfaction Index** — the FEWS NET
+Landscape WRSI: an FAO crop water-balance model tracking how much of a
+*generic* crop's seasonal water requirement rainfall and soil water have
+met, with more weight on high-demand stages such as flowering. It is not
+maize- or sorghum-specific. Shown as % of the 1982–2021 median for the
+same dekad: ~100 = normal. **95+ = near normal · 80–94 = below normal ·
+60–79 = well below normal · below 60 = severe deficit** — these are
+anomaly bands, not the FEWS NET absolute-WRSI crop-condition classes
+(where <50 = failure). The absolute index cannot recover within a
+season; the % of median can move up if the season's later dekads are
+better than usual. Only meaningful in-season (reads ~100 off-season),
+and only from ~60 days into the season: earlier readings have shown no
+skill for the season outcome, so they are shown as "early season" and
+drive no light, alert or CPI impulse.
 
 **FLDAS root-zone soil moisture** — modelled water content of the top
 100cm of soil (NASA land-surface model), monthly, ~6-week lag. Shown as
@@ -121,17 +127,40 @@ COMPOSITE_KEYS = {"ken_grain_basket", "zmb_maize_belt", "zaf_maize_triangle"}
 
 
 # ---- shared map colouring (Overview Africa maps + Country tab map) --------
-def _wrsi_band(w, ins):
-    """Mirror the WRSI chart bands (gold 80-94, orange 60-79, red <60)."""
+# zone_risk.wrsi_early arrives with the 60-day gate; tolerate a live DB
+# computed before it
+_EARLY_COL = "r.wrsi_early" if "wrsi_early" in set(load(
+    "SELECT name FROM pragma_table_info('zone_risk', 'live')").name) \
+    else "0 AS wrsi_early"
+EARLY_FILL = "#c9dbe6"
+
+
+def _wrsi_band(w, ins, early=0):
+    """Mirror the WRSI chart bands (gold 80-94, orange 60-79, red <60).
+    The value is % of the zone's median (pctm), so these are anomaly
+    bands — not the FEWS NET absolute-WRSI crop-condition classes.
+    Early = in the window but before config.WRSI_MIN_SEASON_DAYS: shown,
+    but not a signal."""
+    if early and w is not None and not pd.isna(w):
+        return EARLY_FILL, "early season — not yet a signal"
     if w is None or pd.isna(w) or not ins:
         return "#d8d8d8", "off-season / no data"
     if w >= 95:
-        return "#79c47e", "normal (≥95)"
+        return "#79c47e", "near normal (≥95% of median)"
     if w >= 80:
-        return "#e8c84d", "mild stress (80–94)"
+        return "#e8c84d", "below normal (80–94%)"
     if w >= 60:
-        return "#ec9b3b", "stressed (60–79)"
-    return "#d95f4b", "crop-failure risk (<60)"
+        return "#ec9b3b", "well below normal (60–79%)"
+    return "#d95f4b", "severe deficit (<60%)"
+
+
+def _wrsi_abs_line(r, ins):
+    """Hover line: the absolute LWRSI behind the % of median, so a deficit
+    can be read against the FEWS NET crop-condition scale (<50 failure)."""
+    v = None if r is None else getattr(r, "wrsi_abs", None)
+    if not ins or v is None or pd.isna(v):
+        return ""
+    return f"Absolute WRSI: {v:.0f} (FEWS NET scale)<br>"
 
 
 def _status_fill(status):
@@ -266,7 +295,9 @@ def drought_region_block(expander: bool = True) -> None:
             if z.factor == "export":
                 wr_txt = "n/a · perennial"
             elif pd.notna(z.wrsi):
-                if z.wrsi_in_season:
+                if z.get("wrsi_early", 0) == 1:
+                    wr_txt = f"{z.wrsi:.0f} · early season"
+                elif z.wrsi_in_season:
                     wr_txt = f"{z.wrsi:.0f}"
                     wr_fill = FILL["red"] if z.wrsi < 80 else \
                         FILL["yellow"] if z.wrsi < 95 else FILL["green"]
@@ -315,7 +346,9 @@ def drought_region_block(expander: bool = True) -> None:
         st.caption(
             "Each region carries its own light; the country-level drought "
             "cell is the worst of these. WRSI is dimmed off-season (it "
-            "reads ~100 and shouldn't drive a light). Readings are colored "
+            "reads ~100 and shouldn't drive a light) and in the first 60 "
+            "days of a season (early readings have shown no skill for "
+            "the outcome). Readings are colored "
             "by their own thresholds — WRSI <80 / <95, SPI-3 ≤−1.5 / ≤−1, "
             "soil moisture <82% / <85% — so you can see which indicator "
             "trips a light, not just that one did. Output shock = implied "
@@ -439,12 +472,18 @@ if view == "Overview":
         "Export belts — root-zone soil moisture",
         "Flood watch — all basins"])
     with tab_w:
-        _zr = load("SELECT zone_key, wrsi, wrsi_in_season, spi3, sm, season "
-                   "FROM zone_risk WHERE factor='drought'") \
+        # absolute LWRSI at the same dekad rides along for the hover
+        _zr = load("SELECT r.zone_key, r.wrsi, r.wrsi_in_season, r.spi3, "
+                   "r.sm, r.season, o.value AS wrsi_abs, " + _EARLY_COL + " "
+                   "FROM zone_risk r "
+                   "LEFT JOIN observations o ON o.zone_key=r.zone_key AND "
+                   "o.granule_start=r.as_of AND "
+                   "o.dataset='lwrsi_africa_dekad_data' "
+                   "WHERE r.factor='drought'") \
             .drop_duplicates("zone_key").set_index("zone_key")
         fw = go.Figure()
         _b = _africa_base(fw, _outl)
-        _n_live = 0
+        _n_live = _n_early = 0
         for f in _zgj_all["features"]:
             p = f["properties"]
             zk = p["zone_key"]
@@ -455,12 +494,15 @@ if view == "Overview":
             r = _zr.loc[zk] if zk in _zr.index else None
             w = None if r is None else r.wrsi
             ins = 0 if r is None else r.wrsi_in_season
-            fc, blab = _wrsi_band(w, ins)
+            early = 0 if r is None or pd.isna(r.wrsi_early) else int(r.wrsi_early)
+            fc, blab = _wrsi_band(w, ins, early)
             _n_live += int(bool(ins))
+            _n_early += int(bool(early))
             hover = (f"<b>{zone_label.get(zk, zk)}</b><br>"
                      f"{NAMES_CR.get(p.get('iso3'), p.get('iso3'))}<br>"
-                     f"WRSI: {'—' if w is None or pd.isna(w) else f'{w:.0f}'}"
+                     f"WRSI: {'—' if w is None or pd.isna(w) else f'{w:.0f}% of median'}"
                      f" ({blab})<br>"
+                     + _wrsi_abs_line(r, ins or early)
                      + ("" if r is None or not r.season
                         else f"Season: {r.season}<br>")
                      + ("" if r is None or pd.isna(r.spi3)
@@ -474,12 +516,19 @@ if view == "Overview":
                                line=dict(color="white", width=0.5),
                                hovertemplate=hover, showlegend=False)
         _africa_layout(fw, _b, f"WRSI by growing zone — {_n_live} zones "
-                               "in season (hover for detail)")
+                               f"in season, {_n_early} early season "
+                               "(hover for detail)")
         st.plotly_chart(fw, use_container_width=True)
         st.caption("Staple-crop zones shaded by the latest WRSI, % of "
-                   "median: green ≥95, gold 80–94, orange 60–79, red <60. "
-                   "Gray = outside the zone's growing season (the index "
-                   "reads ~100 off-season and is not a signal) or no data. "
+                   "median: green ≥95 near normal, gold 80–94 below normal, "
+                   "orange 60–79 well below normal, red <60 severe "
+                   "deficit (anomaly bands, not crop-failure classes). "
+                   "Pale blue = early season: the window opened under "
+                   "60 days ago, and readings that early have shown no "
+                   "skill for the season outcome, so they drive no light "
+                   "or alert (value on hover). Gray = outside the zone's "
+                   "growing season (the index reads ~100 off-season and "
+                   "is not a signal) or no data. "
                    "Export belts (coffee, tea, cocoa, tobacco…) are "
                    "perennials with no cereal crop cycle, so they carry no "
                    "WRSI — they have their own soil-moisture map (next tab).")
@@ -1726,8 +1775,13 @@ _ciso = st.sidebar.selectbox("Country", _iso_opts,
 _czones = zones[zones.iso3 == _ciso]
 
 
-_zrisk_map = load("SELECT zone_key, status, wrsi, wrsi_in_season, spi3, sm, "
-                  "season FROM zone_risk WHERE factor IN "
+_zrisk_map = load("SELECT r.zone_key, r.status, r.wrsi, r.wrsi_in_season, "
+                  "r.spi3, r.sm, r.season, o.value AS wrsi_abs, "
+                  "" + _EARLY_COL + " "
+                  "FROM zone_risk r "
+                  "LEFT JOIN observations o ON o.zone_key=r.zone_key AND "
+                  "o.granule_start=r.as_of AND "
+                  "o.dataset='lwrsi_africa_dekad_data' WHERE r.factor IN "
                   "('drought','export')").drop_duplicates("zone_key") \
     .set_index("zone_key")
 _zgj = _json.loads((_dbdir.parent / "data/zones/zones.geojson").read_text())
@@ -1811,9 +1865,11 @@ for f in _zgj["features"]:
     else:
         w = None if r is None else r.wrsi
         ins = 0 if r is None else r.wrsi_in_season
-        fc, blab = _wrsi_band(w, ins)
-        wr_line = (f"WRSI: {'—' if w is None or pd.isna(w) else f'{w:.0f}'}"
-                   f" ({blab})")
+        early = 0 if r is None or pd.isna(r.wrsi_early) else int(r.wrsi_early)
+        fc, blab = _wrsi_band(w, ins, early)
+        wr_line = (f"WRSI: {'—' if w is None or pd.isna(w) else f'{w:.0f}% of median'}"
+                   f" ({blab})<br>"
+                   + _wrsi_abs_line(r, ins or early)).removesuffix("<br>")
     hover = (f"<b>{zone_label.get(zk, zk)}</b><br>"
              f"{(getattr(meta, 'crop', None) or '?')}"
              f"{' · export belt — ' + blab if sector == 'export' else ''}<br>"
@@ -1976,8 +2032,10 @@ try:
         st.session_state["hyd_zone"] = _pts[0]["customdata"]
 except Exception:
     pass
-st.caption("Shading mirrors the WRSI chart bands: green ≥95, gold 80–94, "
-           "orange 60–79, red <60; gray = off-season or no data. Purple "
+st.caption("Shading mirrors the WRSI chart bands (% of median): green "
+           "≥95, gold 80–94, orange 60–79, red <60; pale blue = early "
+           "season (first 60 days, not yet a signal); gray = off-season "
+           "or no data. Purple "
            "edges mark export belts (clipped to their GAEZ crop "
            "footprint). Hover for SPI-3, soil moisture and season."
            + (" Flood overlay: blue quiet, gold heavy pentad, orange "
@@ -2219,15 +2277,15 @@ with col_a:
                        name="WRSI % of median")
         f2.add_hline(y=100, line_dash="dash", line_color="gray")
         f2.add_hrect(y0=80, y1=94, fillcolor="gold", opacity=0.13,
-                     line_width=0, annotation_text="mild stress",
+                     line_width=0, annotation_text="below normal",
                      annotation_position="top left",
                      annotation_font_size=11)
         f2.add_hrect(y0=60, y1=80, fillcolor="orange", opacity=0.15,
-                     line_width=0, annotation_text="moderate stress",
+                     line_width=0, annotation_text="well below normal",
                      annotation_position="top left",
                      annotation_font_size=11)
         f2.add_hrect(y0=0, y1=60, fillcolor="orangered", opacity=0.15,
-                     line_width=0, annotation_text="severe stress",
+                     line_width=0, annotation_text="severe deficit",
                      annotation_position="top left",
                      annotation_font_size=11)
         recent_lw = lw[lw.date >= lw.date.max() - pd.Timedelta(days=1460)]
