@@ -144,14 +144,7 @@ COMPOSITE_KEYS = {"ken_grain_basket", "zmb_maize_belt", "zaf_maize_triangle"}
 _EARLY_COL = "r.wrsi_early" if "wrsi_early" in set(load(
     "SELECT name FROM pragma_table_info('zone_risk', 'live')").name) \
     else "0 AS wrsi_early"
-EARLY_FILL = "#ffffff"   # background under the early-season hatching
-EARLY_PATTERN = dict(shape="/", fgcolor="#4f9a55", bgcolor=EARLY_FILL,
-                     size=6, solidity=0.35)
-
-
-def _early_pattern(fc):
-    """Diagonal hatching for early-season zones; plain fill otherwise."""
-    return EARLY_PATTERN if fc == EARLY_FILL else None
+EARLY_FILL = "#cfe8cf"   # early season: a lighter tint of the green band
 
 
 def _wrsi_band(w, ins, early=0):
@@ -228,9 +221,11 @@ def _rings(feature):
         yield [p[0] for p in rings[0]], [p[1] for p in rings[0]]
 
 
-def _africa_base(fig, outlines, label=True):
-    """Draw the continent, then every monitored country's outline;
-    returns the bbox of the monitored countries."""
+def _africa_base(fig, outlines, label=True, sublabels=None):
+    """Draw the continent, then every monitored country's outline, with
+    country names outside the coast on leader lines (sublabels: optional
+    second line per iso3); returns the bbox to frame."""
+    anchors = {}
     _cont = _dbdir.parent / "data/zones/africa_outline.geojson"
     cont_bounds = None
     if _cont.exists():
@@ -259,14 +254,84 @@ def _africa_base(fig, outlines, label=True):
                             fill="toself", fillcolor="#f4f1ea",
                             hoverinfo="skip", showlegend=False)
         if label and fx:
-            fig.add_annotation(x=(min(fx) + max(fx)) / 2,
-                               y=(min(fy) + max(fy)) / 2,
-                               text=NAMES_CR.get(iso, iso), showarrow=False,
-                               font=dict(size=10, color="#6b6b6b"),
-                               opacity=0.85)
+            anchors[iso] = _ring_centroid(f)
     # frame the whole continent when its outline is available (the
     # monitored countries sit in its southern and eastern two-thirds)
-    return cont_bounds or bounds
+    out = cont_bounds or bounds
+    if label and anchors:
+        out = _outside_labels(fig, anchors, sublabels or {}, out)
+    return out
+
+
+# label columns in open ocean: (x of the column, top y, bottom y,
+# countries top to bottom — ordered so leader lines don't cross)
+_LABEL_COLS = [
+    (-24.0, 19.0, 1.0, ["NGA", "BEN", "GHA", "CIV"]),          # Atlantic
+    (0.0, -3.0, -33.0, ["UGA", "RWA", "ZMB", "ZWE", "ZAF"]),   # S Atlantic
+    (59.0, 14.0, -28.0, ["ETH", "KEN", "TZA", "MWI", "MOZ", "MDG"]),
+]
+
+
+def _ring_centroid(feature):
+    """Area-weighted centroid of a country's largest ring (shoelace) —
+    the leader-line anchor; a bbox centre can fall outside the country."""
+    best = None
+    for xs, ys in _rings(feature):
+        a = cx = cy = 0.0
+        for i in range(len(xs) - 1):
+            c = xs[i] * ys[i + 1] - xs[i + 1] * ys[i]
+            a += c
+            cx += (xs[i] + xs[i + 1]) * c
+            cy += (ys[i] + ys[i + 1]) * c
+        if a and (best is None or abs(a) > best[0]):
+            best = (abs(a), cx / (3 * a), cy / (3 * a))
+    return (best[1], best[2]) if best else None
+
+
+def _outside_labels(fig, anchors, sublabels, bounds):
+    """Country names in ocean columns, joined to the country by a thin
+    leader line; an optional second line (e.g. planting months) below.
+    Returns the bounds widened to take the columns."""
+    for col_x, top, bottom, isos in _LABEL_COLS:
+        isos = [i for i in isos if anchors.get(i)]
+        n = len(isos)
+        for k, iso in enumerate(isos):
+            ax, ay = anchors[iso]
+            ly = top if n == 1 else top - k * (top - bottom) / (n - 1)
+            sub = sublabels.get(iso)
+            text = (f"<b>{NAMES_CR.get(iso, iso)}</b>"
+                    + (f"<br><span style='font-size:9px'>({sub})</span>"
+                       if sub else ""))
+            fig.add_annotation(
+                x=ax, y=ay, ax=col_x, ay=ly, axref="x", ayref="y",
+                text=text, showarrow=True, arrowhead=0, arrowwidth=0.7,
+                arrowcolor="#9a9a9a", standoff=2,
+                font=dict(size=10, color="#4a4a4a"), align="center",
+                bgcolor="rgba(255,255,255,0.85)", borderpad=1)
+            fig.add_scatter(x=[ax], y=[ay], mode="markers",
+                            marker=dict(size=3, color="#6b6b6b"),
+                            hoverinfo="skip", showlegend=False)
+    if bounds is None:
+        return bounds
+    xs = [c[0] for c in _LABEL_COLS]
+    return [min(bounds[0], min(xs) - 5), bounds[1],
+            max(bounds[2], max(xs) + 5), bounds[3]]
+
+
+def _planting_months(zone_frame) -> dict:
+    """iso3 -> 'Mar, Oct': months the staple zones' season windows open."""
+    mon = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
+    out = {}
+    for iso, g in zone_frame[~zone_frame.zone_key.isin(COMPOSITE_KEYS)] \
+            .groupby("iso3"):
+        starts = set()
+        for seasons in g.seasons.dropna():
+            for tok in seasons.split(","):
+                if ":" in tok:
+                    starts.add(int(tok.split(":")[1].split("-")[0]))
+        if starts:
+            out[iso] = ", ".join(mon[m - 1] for m in sorted(starts))
+    return out
 
 
 def _africa_layout(fig, bounds, title, height=760):
@@ -517,7 +582,9 @@ if view == "Overview":
                    "WHERE r.factor='drought'") \
             .drop_duplicates("zone_key").set_index("zone_key")
         fw = go.Figure()
-        _b = _africa_base(fw, _outl)
+        _b = _africa_base(fw, _outl, sublabels=_planting_months(
+            zones[zones.get("sector", "staple") != "export"]
+            if "sector" in zones.columns else zones))
         _n_live = _n_early = 0
         for f in _zgj_all["features"]:
             p = f["properties"]
@@ -548,7 +615,6 @@ if view == "Overview":
             for xs, ys in _rings(f):
                 fw.add_scatter(x=xs, y=ys, mode="lines", fill="toself",
                                fillcolor=fc, opacity=0.9, name="",
-                               fillpattern=_early_pattern(fc),
                                line=dict(color="white", width=0.5),
                                hovertemplate=hover, showlegend=False)
         _africa_layout(fw, _b, f"WRSI by growing zone — {_n_live} zones "
@@ -559,7 +625,7 @@ if view == "Overview":
                    "median: green ≥95 near normal, gold 80–94 below normal, "
                    "orange 60–79 well below normal, red <60 severe "
                    "deficit (anomaly bands, not crop-failure classes). "
-                   "Green hatching = early season: the window opened under "
+                   "Light green = early season: the window opened under "
                    "60 days ago, and readings that early have shown no "
                    "skill for the season outcome, so they drive no light "
                    "or alert (value on hover). Gray = outside the zone's "
@@ -1933,7 +1999,7 @@ for f in _zgj["features"]:
         ys = [pt[1] for pt in rings[0]]
         fmap.add_scatter(
             x=xs, y=ys, mode="lines", fill="toself", fillcolor=fc,
-            opacity=0.85, name="", fillpattern=_early_pattern(fc),
+            opacity=0.85, name="",
             line=dict(color="#5f4379" if sector == "export" else "white",
                       width=1.6 if sector == "export" else 0.7),
             customdata=[zk] * len(xs), hovertemplate=hover,
@@ -2076,7 +2142,7 @@ try:
 except Exception:
     pass
 st.caption("Shading mirrors the WRSI chart bands (% of median): green "
-           "≥95, gold 80–94, orange 60–79, red <60; green hatching = early "
+           "≥95, gold 80–94, orange 60–79, red <60; light green = early "
            "season (first 60 days, not yet a signal); gray = off-season "
            "or no data."
            + (" Purple edges mark export belts (clipped to their GAEZ "
