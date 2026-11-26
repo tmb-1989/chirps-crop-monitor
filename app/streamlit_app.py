@@ -144,7 +144,14 @@ COMPOSITE_KEYS = {"ken_grain_basket", "zmb_maize_belt", "zaf_maize_triangle"}
 _EARLY_COL = "r.wrsi_early" if "wrsi_early" in set(load(
     "SELECT name FROM pragma_table_info('zone_risk', 'live')").name) \
     else "0 AS wrsi_early"
-EARLY_FILL = "#c9dbe6"
+EARLY_FILL = "#ffffff"   # background under the early-season crosshatch
+EARLY_PATTERN = dict(shape="x", fgcolor="#4f9a55", bgcolor=EARLY_FILL,
+                     size=6, solidity=0.35)
+
+
+def _early_pattern(fc):
+    """Crosshatch for early-season zones; plain fill otherwise."""
+    return EARLY_PATTERN if fc == EARLY_FILL else None
 
 
 def _wrsi_band(w, ins, early=0):
@@ -541,6 +548,7 @@ if view == "Overview":
             for xs, ys in _rings(f):
                 fw.add_scatter(x=xs, y=ys, mode="lines", fill="toself",
                                fillcolor=fc, opacity=0.9, name="",
+                               fillpattern=_early_pattern(fc),
                                line=dict(color="white", width=0.5),
                                hovertemplate=hover, showlegend=False)
         _africa_layout(fw, _b, f"WRSI by growing zone — {_n_live} zones "
@@ -551,7 +559,7 @@ if view == "Overview":
                    "median: green ≥95 near normal, gold 80–94 below normal, "
                    "orange 60–79 well below normal, red <60 severe "
                    "deficit (anomaly bands, not crop-failure classes). "
-                   "Pale blue = early season: the window opened under "
+                   "Green crosshatch = early season: the window opened under "
                    "60 days ago, and readings that early have shown no "
                    "skill for the season outcome, so they drive no light "
                    "or alert (value on hover). Gray = outside the zone's "
@@ -1925,7 +1933,7 @@ for f in _zgj["features"]:
         ys = [pt[1] for pt in rings[0]]
         fmap.add_scatter(
             x=xs, y=ys, mode="lines", fill="toself", fillcolor=fc,
-            opacity=0.85, name="",
+            opacity=0.85, name="", fillpattern=_early_pattern(fc),
             line=dict(color="#5f4379" if sector == "export" else "white",
                       width=1.6 if sector == "export" else 0.7),
             customdata=[zk] * len(xs), hovertemplate=hover,
@@ -2068,7 +2076,7 @@ try:
 except Exception:
     pass
 st.caption("Shading mirrors the WRSI chart bands (% of median): green "
-           "≥95, gold 80–94, orange 60–79, red <60; pale blue = early "
+           "≥95, gold 80–94, orange 60–79, red <60; green crosshatch = early "
            "season (first 60 days, not yet a signal); gray = off-season "
            "or no data."
            + (" Purple edges mark export belts (clipped to their GAEZ "
