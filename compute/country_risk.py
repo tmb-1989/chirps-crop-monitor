@@ -27,7 +27,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "ingest"))
 sys.path.insert(0, str(ROOT / "compute"))
 import db  # noqa: E402
-from config import wrsi_reading_counts  # noqa: E402
+from config import EXPORT_BELTS_ACTIVE, wrsi_reading_counts  # noqa: E402
 import enso  # noqa: E402
 import iod  # noqa: E402
 import kariba  # noqa: E402
@@ -626,13 +626,15 @@ def main() -> int:
     con = db.connect()
     con.executescript(SCHEMA)
     zr = drought_zones(con, today)
-    zx = drought_zones(con, today, sector="export")
+    zx = drought_zones(con, today, sector="export") if EXPORT_BELTS_ACTIVE \
+        else pd.DataFrame(columns=zr.columns)
     factors = {"enso": enso_status(con, today),
                "iod": iod_status(con, today),
                "drought": drought_status(zr),
-               "export": drought_status(
+               **({"export": drought_status(
                    zx, empty_reason="no export-crop belts for this "
-                                    "country"),
+                                    "country")}
+                  if EXPORT_BELTS_ACTIVE else {}),
                "flood": flood_status(con, today),
                "hydro": hydro_status(con, today)}
     now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
@@ -643,6 +645,11 @@ def main() -> int:
             "SELECT * FROM pragma_table_info('zone_risk', 'live')")]:
         con.execute("ALTER TABLE live.zone_risk ADD COLUMN wrsi_early "
                     "INTEGER")
+    if not EXPORT_BELTS_ACTIVE:
+        # switched off: clear the belts' rows so no stale export light,
+        # map or email survives (no transition is logged for removal)
+        con.execute("DELETE FROM live.zone_risk WHERE factor='export'")
+        con.execute("DELETE FROM live.country_risk WHERE factor='export'")
     con.executemany(
         "INSERT OR REPLACE INTO zone_risk VALUES "
         "(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",

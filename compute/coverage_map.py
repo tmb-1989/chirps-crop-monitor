@@ -23,6 +23,7 @@ from shapely.geometry import shape  # noqa: E402
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "ingest"))
 import db  # noqa: E402
+from config import EXPORT_BELTS_ACTIVE  # noqa: E402
 
 NAMES = {"KEN": "Kenya", "ETH": "Ethiopia", "TZA": "Tanzania",
          "RWA": "Rwanda", "UGA": "Uganda", "NGA": "Nigeria",
@@ -117,7 +118,9 @@ def main() -> int:
     crop, flood = {}, {}
     for f in zones["features"]:
         p = f["properties"]
-        if p["zone_key"] in COMPOSITES:
+        if p["zone_key"] in COMPOSITES or (
+                not EXPORT_BELTS_ACTIVE and
+                zmeta.get(p["zone_key"], {}).get("sector") == "export"):
             continue
         crop.setdefault(p["iso3"], []).append((p["zone_key"],
                                                shape(f["geometry"])))

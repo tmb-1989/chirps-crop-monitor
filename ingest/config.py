@@ -108,6 +108,11 @@ try:
 except ImportError:
     pass
 
+# Export belts on/off (26 Nov 2026: off). Off = no export lights, map,
+# zone pages or status emails; ingest keeps collecting the belts' data so
+# history is intact if they are switched back on.
+EXPORT_BELTS_ACTIVE = False
+
 # V2.3 export-crop zones (compute/export_zones.py): perennial belts on
 # admin-1 polygons, sector='export' — stress indicator only, feeding
 # the export board column, never the food-CPI chain.

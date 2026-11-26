@@ -58,6 +58,8 @@ Gray = inputs missing or stale, never "safe". Snapshot in `country_risk`,
 transitions in `country_risk_log`, per-zone drought lights (the board's
 drill-down expander) in `zone_risk` (`compute/country_risk.py`).
 
+**Export belts are switched off** (26 Nov 2026, `config.EXPORT_BELTS_ACTIVE = False`): no export column, map, zone pages, status-log entries or emails; `country_risk` clears their rows; ingest still collects their data. Set the flag to `True` to restore.
+
 WRSI rules (29 Oct 2026): a reading counts — board light, status
 emails and the CPI impulse alike — when its dekad falls inside one of the
 zone's configured windows **and** the window is at least

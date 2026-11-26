@@ -41,6 +41,18 @@ def load(query: str, params=()) -> pd.DataFrame:
 
 
 zones = load("SELECT * FROM zones ORDER BY iso3, name")
+# export belts can be switched off in config (EXPORT_BELTS_ACTIVE): drop
+# them from every zone list, map and table
+import sys as _sys_cfg  # noqa: E402
+_sys_cfg.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent
+                            / "ingest"))
+from config import EXPORT_BELTS_ACTIVE  # noqa: E402
+_EXPORT_KEYS = set(zones.zone_key[zones.sector == "export"]) \
+    if "sector" in zones.columns else set()
+if not EXPORT_BELTS_ACTIVE:
+    zones = zones[~zones.zone_key.isin(_EXPORT_KEYS)]
+_RISK_FACTORS = "('drought','export')" if EXPORT_BELTS_ACTIVE \
+    else "('drought')"
 if zones.empty:
     st.error("No zones in DB — run ingest first.")
     st.stop()
@@ -266,7 +278,7 @@ def drought_region_block(expander: bool = True) -> None:
     """Per-zone drought lights table (zone_risk), worst-first per country.
     Rendered inside an expander (Country risk view) or inline (Overview)."""
     zrisk = load("SELECT * FROM zone_risk WHERE factor IN "
-                 "('drought','export')")
+                 + _RISK_FACTORS)
     if zrisk.empty:
         return
     try:
@@ -367,6 +379,8 @@ if view == "Overview":
     FACTORS = [("enso", "El Niño / ENSO"), ("iod", "Indian Ocean Dipole"),
                ("drought", "Drought"), ("export", "Export crops"),
                ("flood", "Flood"), ("hydro", "Hydropower")]
+    if not EXPORT_BELTS_ACTIVE:
+        FACTORS = [f for f in FACTORS if f[0] != "export"]
 
     # compact HTML board: lights only, the reason appears on hover
     # (title attribute) — the full-text table outgrew the screen
@@ -380,9 +394,14 @@ if view == "Overview":
         "vertical-align:bottom'>Country</th>"
         + _th.format(attrs=" rowspan=2", label="El Niño / ENSO")
         + _th.format(attrs=" rowspan=2", label="Indian Ocean Dipole")
-        + _th.format(attrs=" colspan=2", label="Drought")
+        + (_th.format(attrs=" colspan=2", label="Drought")
+           if EXPORT_BELTS_ACTIVE else
+           _th.format(attrs="", label="Drought"))
         + _th.format(attrs=" rowspan=2", label="Flood")
         + _th.format(attrs=" rowspan=2", label="Hydropower"))
+    if not EXPORT_BELTS_ACTIVE:
+        # no staple/export sub-row: every header cell is one row tall
+        head_top = head_top.replace(" rowspan=2", "")
     head_sub = (
         "<th style='padding:2px 10px;text-align:center;font-weight:400;"
         "font-size:12px;color:#5b6470'>staple crops</th>"
@@ -408,7 +427,8 @@ if view == "Overview":
         body.append("<tr>" + "".join(tds) + "</tr>")
     st.markdown(
         "<table style='border-collapse:collapse;width:100%'>"
-        f"<tr>{head_top}</tr><tr>{head_sub}</tr>"
+        f"<tr>{head_top}</tr>"
+        + (f"<tr>{head_sub}</tr>" if EXPORT_BELTS_ACTIVE else "")
         + "".join(body) + "</table>",
         unsafe_allow_html=True)
     st.caption("Hover a light for the reason behind it.")
@@ -442,7 +462,9 @@ if view == "Overview":
 
     # ---- recent status changes: always visible, right under the board ----
     log = load("SELECT changed_at, country, factor, prev, status, reason "
-               "FROM country_risk_log ORDER BY changed_at DESC LIMIT 20")
+               "FROM country_risk_log"
+               + ("" if EXPORT_BELTS_ACTIVE else " WHERE factor<>'export'")
+               + " ORDER BY changed_at DESC LIMIT 20")
     st.subheader(f"Recent status changes ({len(log)})")
     if log.empty:
         st.caption("No changes recorded yet — the log starts with the "
@@ -467,10 +489,16 @@ if view == "Overview":
         if "sector" in zones.columns else {}
     _crop_of = zones.set_index("zone_key")["crop"].to_dict() \
         if "crop" in zones.columns else {}
-    tab_w, tab_x, tab_f = st.tabs([
-        "Crop water stress (WRSI) — staple zones",
-        "Export belts — root-zone soil moisture",
-        "Flood watch — all basins"])
+    if EXPORT_BELTS_ACTIVE:
+        tab_w, tab_x, tab_f = st.tabs([
+            "Crop water stress (WRSI) — staple zones",
+            "Export belts — root-zone soil moisture",
+            "Flood watch — all basins"])
+    else:
+        tab_w, tab_f = st.tabs([
+            "Crop water stress (WRSI) — staple zones",
+            "Flood watch — all basins"])
+        tab_x = None
     with tab_w:
         # absolute LWRSI at the same dekad rides along for the hover
         _zr = load("SELECT r.zone_key, r.wrsi, r.wrsi_in_season, r.spi3, "
@@ -489,7 +517,7 @@ if view == "Overview":
             zk = p["zone_key"]
             # staple cereal zones only: WRSI models an annual crop cycle,
             # so the perennial export belts are left off this map
-            if zk in COMPOSITE_KEYS or _sector_of.get(zk) == "export":
+            if zk in COMPOSITE_KEYS or zk in _EXPORT_KEYS:
                 continue
             r = _zr.loc[zk] if zk in _zr.index else None
             w = None if r is None else r.wrsi
@@ -531,52 +559,56 @@ if view == "Overview":
                    "is not a signal) or no data. "
                    "Export belts (coffee, tea, cocoa, tobacco…) are "
                    "perennials with no cereal crop cycle, so they carry no "
-                   "WRSI — they have their own soil-moisture map (next tab).")
-    with tab_x:
-        _xr = load("SELECT zone_key, status, sm, spi3, as_of FROM zone_risk "
-                   "WHERE factor='export'").drop_duplicates("zone_key") \
-            .set_index("zone_key")
-        fx = go.Figure()
-        _b = _africa_base(fx, _outl)
-        _n_belt, _n_dry = 0, 0
-        for f in _zgj_all["features"]:
-            p = f["properties"]
-            zk = p["zone_key"]
-            if _sector_of.get(zk) != "export":
-                continue
-            r = _xr.loc[zk] if zk in _xr.index else None
-            smv = None if r is None else r.sm
-            fc, blab = _sm_band(smv)
-            _n_belt += 1
-            _n_dry += int(smv is not None and not pd.isna(smv) and smv < 85)
-            hover = (f"<b>{zone_label.get(zk, zk)}</b><br>"
-                     f"{NAMES_CR.get(p.get('iso3'), p.get('iso3'))} · "
-                     f"{_crop_of.get(zk, '?')}<br>"
-                     f"Root-zone soil moisture: "
-                     f"{'—' if smv is None or pd.isna(smv) else f'{smv:.0f}%'}"
-                     f" ({blab})<br>"
-                     + ("" if r is None or pd.isna(r.spi3)
-                        else f"SPI-3: {r.spi3:.1f}<br>")
-                     + ("" if r is None or not r.as_of
-                        else f"as of {r.as_of}")
-                     + "<extra></extra>")
-            for xs, ys in _rings(f):
-                fx.add_scatter(x=xs, y=ys, mode="lines", fill="toself",
-                               fillcolor=fc, opacity=0.9, name="",
-                               line=dict(color="white", width=0.5),
-                               hovertemplate=hover, showlegend=False)
-        _africa_layout(fx, _b, f"Export belts by root-zone soil moisture — "
-                               f"{_n_dry} of {_n_belt} below the 85% watch "
-                               "line (hover for detail)")
-        st.plotly_chart(fx, use_container_width=True)
-        st.caption("Perennial export belts (coffee, tea, cocoa, tobacco, "
-                   "cashew, vanilla, cotton; clipped to their "
-                   "GAEZ crop footprint) shaded by FLDAS root-zone soil "
-                   "moisture as % of the long-run mean — the slow-moving "
-                   "water buffer a tree crop actually draws on: green ≥95, "
-                   "gold 85–95 watch, orange 75–85 issue, red <75. Monthly, "
-                   "~6-week lag; SPI-3 on hover. WRSI is not applied to "
-                   "these crops.")
+                   "WRSI"
+                   + (" — they have their own soil-moisture map (next tab)."
+                      if EXPORT_BELTS_ACTIVE else
+                      " and are switched off for now."))
+    if tab_x is not None:
+        with tab_x:
+            _xr = load("SELECT zone_key, status, sm, spi3, as_of FROM zone_risk "
+                       "WHERE factor='export'").drop_duplicates("zone_key") \
+                .set_index("zone_key")
+            fx = go.Figure()
+            _b = _africa_base(fx, _outl)
+            _n_belt, _n_dry = 0, 0
+            for f in _zgj_all["features"]:
+                p = f["properties"]
+                zk = p["zone_key"]
+                if _sector_of.get(zk) != "export":
+                    continue
+                r = _xr.loc[zk] if zk in _xr.index else None
+                smv = None if r is None else r.sm
+                fc, blab = _sm_band(smv)
+                _n_belt += 1
+                _n_dry += int(smv is not None and not pd.isna(smv) and smv < 85)
+                hover = (f"<b>{zone_label.get(zk, zk)}</b><br>"
+                         f"{NAMES_CR.get(p.get('iso3'), p.get('iso3'))} · "
+                         f"{_crop_of.get(zk, '?')}<br>"
+                         f"Root-zone soil moisture: "
+                         f"{'—' if smv is None or pd.isna(smv) else f'{smv:.0f}%'}"
+                         f" ({blab})<br>"
+                         + ("" if r is None or pd.isna(r.spi3)
+                            else f"SPI-3: {r.spi3:.1f}<br>")
+                         + ("" if r is None or not r.as_of
+                            else f"as of {r.as_of}")
+                         + "<extra></extra>")
+                for xs, ys in _rings(f):
+                    fx.add_scatter(x=xs, y=ys, mode="lines", fill="toself",
+                                   fillcolor=fc, opacity=0.9, name="",
+                                   line=dict(color="white", width=0.5),
+                                   hovertemplate=hover, showlegend=False)
+            _africa_layout(fx, _b, f"Export belts by root-zone soil moisture — "
+                                   f"{_n_dry} of {_n_belt} below the 85% watch "
+                                   "line (hover for detail)")
+            st.plotly_chart(fx, use_container_width=True)
+            st.caption("Perennial export belts (coffee, tea, cocoa, tobacco, "
+                       "cashew, vanilla, cotton; clipped to their "
+                       "GAEZ crop footprint) shaded by FLDAS root-zone soil "
+                       "moisture as % of the long-run mean — the slow-moving "
+                       "water buffer a tree crop actually draws on: green ≥95, "
+                       "gold 85–95 watch, orange 75–85 issue, red <75. Monthly, "
+                       "~6-week lag; SPI-3 on hover. WRSI is not applied to "
+                       "these crops.")
     with tab_f:
         _bs = load("SELECT zone_key, tier, pct_normal, ante_pct, "
                    "MAX(granule_start) AS g FROM flood_state "
@@ -675,7 +707,9 @@ if view == "Overview":
                          expanded=False):
             st.image(str(_map_png), use_container_width=True)
             st.caption(
-                "Crop zones colored by crop (purple = export belts), "
+                "Crop zones colored by crop"
+                + (" (purple = export belts)" if EXPORT_BELTS_ACTIVE
+                   else "") + ", "
                 "flood basins in blue, over Natural Earth outlines. "
                 "Regenerated on dekad days by compute/coverage_map.py.")
     st.stop()
@@ -1782,7 +1816,7 @@ _zrisk_map = load("SELECT r.zone_key, r.status, r.wrsi, r.wrsi_in_season, "
                   "LEFT JOIN observations o ON o.zone_key=r.zone_key AND "
                   "o.granule_start=r.as_of AND "
                   "o.dataset='lwrsi_africa_dekad_data' WHERE r.factor IN "
-                  "('drought','export')").drop_duplicates("zone_key") \
+                  + _RISK_FACTORS).drop_duplicates("zone_key") \
     .set_index("zone_key")
 _zgj = _json.loads((_dbdir.parent / "data/zones/zones.geojson").read_text())
 _out_path = _dbdir.parent / "data/zones/country_outlines.geojson"
@@ -1846,7 +1880,8 @@ for f in _zgj["features"]:
     zk = p["zone_key"]
     if p["iso3"] != _ciso or zk.endswith(("_basket", "_belt_x")) or \
             zk in ("ken_grain_basket", "zmb_maize_belt",
-                   "zaf_maize_triangle"):
+                   "zaf_maize_triangle") or \
+            (not EXPORT_BELTS_ACTIVE and zk in _EXPORT_KEYS):
         continue
     r = _zrisk_map.loc[zk] if zk in _zrisk_map.index else None
     meta = _czones.set_index("zone_key").loc[zk] \
@@ -2035,9 +2070,10 @@ except Exception:
 st.caption("Shading mirrors the WRSI chart bands (% of median): green "
            "≥95, gold 80–94, orange 60–79, red <60; pale blue = early "
            "season (first 60 days, not yet a signal); gray = off-season "
-           "or no data. Purple "
-           "edges mark export belts (clipped to their GAEZ crop "
-           "footprint). Hover for SPI-3, soil moisture and season."
+           "or no data."
+           + (" Purple edges mark export belts (clipped to their GAEZ "
+              "crop footprint)." if _has_export else "")
+           + " Hover for SPI-3, soil moisture and season."
            + (" Flood overlay: blue quiet, gold heavy pentad, orange "
               "armed, red alerting." if _show_flood else "")
            + (" Hydro overlay (dashed): catchment upstream of the dam, "
