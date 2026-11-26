@@ -70,7 +70,7 @@ based: over 2010–26 a pctm <80 in a window's first two dekads ended the
 season <80 only 4–5% of the time (base rate 7.9%), and early readings
 were uncorrelated with the end-of-season value until ~dekad 6. Readings
 inside the window but before the gate are stored with
-`zone_risk.wrsi_early=1` and drawn as a green crosshatch ("early season — not yet a
+`zone_risk.wrsi_early=1` and drawn with green diagonal hatching ("early season — not yet a
 signal") on the maps, so an open season is visibly open without
 driving a light. Kenya's grain-basket zones carry
 both `long_rains:3-9` and `short_rains:10-1`. **Export belts (coffee,
